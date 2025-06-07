@@ -223,8 +223,7 @@ function createConnectionHandler(config: ServerConfig) {
       // Cyberlife game seems to have problem with my next command after the IAC NOP heartbeat
       // telnet.write(Uint8Array.from([Cmd.IAC, Cmd.NOP]));
 
-      // This seems to work better for Cyberlife. but not sure it actuallykeeps alove
-      // it's a space folowed by a backspace.
+      // This seems to work better for Cyberlife. but not sure it actually works to keep conn alive
       console.log("[heartbeat] sending <space><backspace>");
       telnet.write(Buffer.from(" \b"));
 
@@ -273,10 +272,10 @@ function createConnectionHandler(config: ServerConfig) {
 export function createServer(config: ServerConfig) {
   const server = new ws.WebSocketServer({ noServer: true });
   const httpServer = createHttpServer(server);
-  
-  httpServer.on('upgrade', (request, socket, head) => {
+
+  httpServer.on("upgrade", (request, socket, head) => {
     server.handleUpgrade(request, socket, head, (ws) => {
-      server.emit('connection', ws, request);
+      server.emit("connection", ws, request);
     });
   });
 
