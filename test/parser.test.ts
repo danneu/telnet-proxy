@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { Parser, Cmd, type Chunk } from "../src/parser.ts";
+import { Parser, Cmd, type Chunk } from "../src/parser.js";
 
 // Type predicate to check if chunk is a subnegotiation
 function isSBChunk(

@@ -2,9 +2,9 @@ import * as ws from "ws";
 import * as net from "net";
 import * as zlib from "zlib";
 import * as http from "http";
-import { Parser, type Chunk, Cmd, Dmc } from "./parser.ts";
+import { Parser, type Chunk, Cmd, Dmc } from "./parser.js";
 import { IncomingMessage } from "http";
-import { decodeText } from "./utils/decode-text.ts";
+import { decodeText } from "./utils/decode-text.js";
 import { z } from "zod";
 export type ServerConfig = {
   PORT: number;

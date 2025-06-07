@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { listen } from "../src/index.ts";
+import { listen } from "../src/index.js";
 import { z } from "zod";
 import "dotenv/config";
 
