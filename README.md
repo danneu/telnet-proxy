@@ -2,11 +2,23 @@
 
 A Telnet to WebSocket proxy server.
 
-## Run
+## Installation
+
+### Global Installation (Recommended)
 
 ```sh
-npm run dev # dev
-npm run start # prod
+npm install -g telnet-proxy
+telnet-proxy
+```
+
+### Local Development
+
+```sh
+git clone https://github.com/danneu/telnet-proxy.git
+cd telnet-proxy
+pnpm install
+pnpm run dev # dev
+pnpm run start # prod
 ```
 
 ## Connect

@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+import { listen } from "../src/index.ts";
 import { z } from "zod";
 import "dotenv/config";
 
@@ -18,4 +20,5 @@ if (!result.success) {
   process.exit(1);
 }
 
-export const config = result.data;
+const config = result.data;
+listen(config);

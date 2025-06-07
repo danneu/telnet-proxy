@@ -6,7 +6,7 @@ kill_signal = "SIGINT"
 kill_timeout = 5
 
 [processes]
-app = "node src/index.ts"
+app = "node bin/telnet-proxy.ts"
 
 [build]
 

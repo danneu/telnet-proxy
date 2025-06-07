@@ -13,9 +13,10 @@ RUN pnpm install --frozen-lockfile --prod
 
 # Copy source code
 COPY src ./src
+COPY bin ./bin
 
 # Expose port
 EXPOSE 8080
 
 # Start the application
-CMD ["node", "src/index.ts"]
+CMD ["npm", "run", "start"]

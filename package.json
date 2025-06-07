@@ -23,16 +23,20 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "type": "module",
+  "bin": {
+    "telnet-proxy": "bin/telnet-proxy.ts"
+  },
   "files": [
     "src",
+    "bin",
     "README.md"
   ],
   "scripts": {
     "deploy": "flyctl deploy",
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch bin/telnet-proxy.ts",
     "check": "tsc --noEmit",
-    "lint": "eslint src test --fix",
-    "start": "node src/index.ts",
+    "lint": "eslint --fix",
+    "start": "node bin/telnet-proxy.ts",
     "test": "node --test test/**/*.test.ts"
   },
   "dependencies": {
