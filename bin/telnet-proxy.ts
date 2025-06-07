@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { listen } from "../src/index.js";
+import { createServer } from "../src/index.js";
 import { z } from "zod";
 import "dotenv/config";
 
@@ -21,4 +21,13 @@ if (!result.success) {
 }
 
 const config = result.data;
-listen(config);
+const server = createServer(config);
+server
+  .listen()
+  .then(() => {
+    console.log(`Listening on port ${config.PORT}...`);
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

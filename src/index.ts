@@ -1,63 +1,21 @@
 import * as ws from "ws";
 import * as net from "net";
 import * as zlib from "zlib";
-import * as http from "http";
 import { Parser, type Chunk, Cmd, Dmc } from "./parser.js";
 import { IncomingMessage } from "http";
 import { decodeText } from "./utils/decode-text.js";
 import { z } from "zod";
+import iconv from "iconv-lite";
+import { createHttpServer } from "./http-server.js";
+
 export type ServerConfig = {
   PORT: number;
   HEARTBEAT_INTERVAL: number;
   TELNET_TIMEOUT: number;
   PARSER_BUFFER_SIZE: number;
 };
-import iconv from "iconv-lite";
 
 // https://users.cs.cf.ac.uk/Dave.Marshall/Internet/node141.html
-
-// Create HTTP server to handle both WebSocket upgrades and health endpoint
-const httpServer = http.createServer((req, res) => {
-  const info = {
-    uptime: Math.floor(process.uptime()),
-    connectedClients: server.clients.size,
-  };
-
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(info));
-  } else if (req.url === "/") {
-    const acceptsHtml = req.headers.accept?.includes("text/html");
-
-    if (acceptsHtml) {
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Telnet Proxy</title>
-</head>
-<body>
-  <h1>Telnet Proxy running</h1>
-  <p>More info: <a href="https://github.com/danneu/telnet-proxy">https://github.com/danneu/telnet-proxy</a></p>
-  <ul>
-    <li>Uptime: ${info.uptime} seconds</li>
-    <li>Connected clients: ${info.connectedClients}</li>
-  </ul>
-</body>
-</html>`);
-    } else {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(info));
-    }
-  } else {
-    res.writeHead(404, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Not found" }));
-  }
-});
-
-const server = new ws.WebSocketServer({
-  server: httpServer,
-});
 
 const OptionsSchema = z.object({
   host: z.string(),
@@ -312,28 +270,42 @@ function createConnectionHandler(config: ServerConfig) {
   };
 }
 
-export function listen(config: ServerConfig) {
+export function createServer(config: ServerConfig) {
+  const server = new ws.WebSocketServer({ noServer: true });
+  const httpServer = createHttpServer(server);
+  
+  httpServer.on('upgrade', (request, socket, head) => {
+    server.handleUpgrade(request, socket, head, (ws) => {
+      server.emit('connection', ws, request);
+    });
+  });
+
   server.on("connection", createConnectionHandler(config));
 
-  httpServer.listen(config.PORT);
-  console.log(`Listening on port ${config.PORT}...`);
-
-  // Graceful shutdown handling
-  process.on("SIGTERM", gracefulShutdown);
-  process.on("SIGINT", gracefulShutdown);
-
-  function gracefulShutdown() {
-    console.log("Shutting down gracefully...");
-    server.close(() => {
-      console.log("WebSocket server closed");
-      httpServer.close(() => {
-        console.log("HTTP server closed");
-        process.exit(0);
+  function listen(): Promise<void> {
+    return new Promise((resolve) => {
+      httpServer.listen(config.PORT, () => {
+        resolve();
       });
+
+      // Graceful shutdown handling
+      process.on("SIGTERM", gracefulShutdown);
+      process.on("SIGINT", gracefulShutdown);
+
+      function gracefulShutdown() {
+        console.log("Shutting down gracefully...");
+        server.close(() => {
+          console.log("WebSocket server closed");
+          httpServer.close(() => {
+            console.log("HTTP server closed");
+            process.exit(0);
+          });
+        });
+      }
     });
   }
 
-  return { server, httpServer };
+  return { listen };
 }
 
 // Escape IAC bytes in user data for telnet transmission
