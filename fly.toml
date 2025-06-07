@@ -1,6 +1,6 @@
 # fly.toml file generated for telnet-proxy on 2022-03-24T19:39:41-06:00
 
-app = "telnet-ws"
+app = "telnet-proxy"
 
 kill_signal = "SIGINT"
 kill_timeout = 5

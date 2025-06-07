@@ -17,7 +17,7 @@ export type ServerConfig = {
 
 // https://users.cs.cf.ac.uk/Dave.Marshall/Internet/node141.html
 
-const OptionsSchema = z.object({
+const ConnectionOptionsSchema = z.object({
   host: z.string(),
   port: z.coerce.number().optional().default(23),
   mccp2: z.preprocess(
@@ -30,11 +30,13 @@ const OptionsSchema = z.object({
     .default("auto"),
 });
 
+export type ConnectionOptions = z.infer<typeof ConnectionOptionsSchema>;
+
 function createConnectionHandler(config: ServerConfig) {
   return (socket: ws.WebSocket, req: IncomingMessage) => {
     const url = new URL(req.url!, "ws://localhost");
 
-    const result = OptionsSchema.safeParse(urlParamsToRecord(url.searchParams));
+    const result = ConnectionOptionsSchema.safeParse(urlParamsToRecord(url.searchParams));
 
     if (!result.success) {
       socket.send(
