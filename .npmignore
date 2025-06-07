@@ -1,0 +1,24 @@
+# Development files
+node_modules/
+.git/
+.github/
+*.log
+.env*
+
+# Build and deployment
+Dockerfile
+.dockerignore
+fly.toml
+
+# Development tools
+eslint.config.js
+tsconfig.json
+.prettierrc
+
+# Tests
+test/
+
+# Lock files
+pnpm-lock.yaml
+yarn.lock
+package-lock.json

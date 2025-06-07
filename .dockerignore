@@ -1,0 +1,8 @@
+node_modules
+test
+*.test.ts
+.git
+.gitignore
+README.md
+eslint.config.js
+fly.toml
