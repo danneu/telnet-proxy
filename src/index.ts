@@ -117,19 +117,6 @@ function createConnectionHandler(config: ServerConfig) {
     // Our initial pipeline that may be unpiped and repiped later.
     telnet.pipe(parserStream);
 
-    function prettyChunk(chunk: Chunk): Chunk & {
-      targetName?: string | undefined;
-      codeName?: string | undefined;
-    } {
-      if ("target" in chunk && chunk.target) {
-        return { ...chunk, targetName: Dmc[chunk.target] || "<unknown>" };
-      }
-      if ("code" in chunk && chunk.code) {
-        return { ...chunk, codeName: Dmc[chunk.code] || "<unknown>" };
-      }
-      return chunk;
-    }
-
     function ondata(chunk: Chunk) {
       console.log("[ondata] recv chunk", prettyChunk(chunk));
       if (chunk.type === "DATA") {
@@ -381,10 +368,22 @@ function escapeIAC(data: Uint8Array): Uint8Array {
 }
 
 function urlParamsToRecord(params: URLSearchParams): Record<string, string> {
-  return Array.from(params.entries()).reduce(
-    (acc, [key, value]) => {
-      return { ...acc, [key]: value };
-    },
-    Object.create(null) as Record<string, string>
-  );
+  const result: Record<string, string> = Object.create(null);
+  for (const [key, value] of params.entries()) {
+    result[key] = value;
+  }
+  return result;
+}
+
+function prettyChunk(chunk: Chunk): Chunk & {
+  targetName?: string | undefined;
+  codeName?: string | undefined;
+} {
+  if ("target" in chunk && chunk.target) {
+    return { ...chunk, targetName: Dmc[chunk.target] || "<unknown>" };
+  }
+  if ("code" in chunk && chunk.code) {
+    return { ...chunk, codeName: Dmc[chunk.code] || "<unknown>" };
+  }
+  return chunk;
 }
