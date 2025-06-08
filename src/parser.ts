@@ -164,6 +164,9 @@ class Parser {
 
   // decodes next chunk from buf, if possible
   // mutates this.buf
+  //
+  // it's important that when next() encounters an incomplete sequence
+  // it leaves the internal buffer unmodified.
   next(): Chunk | null {
     let i = 0;
     let data = [];

@@ -185,7 +185,7 @@ function createConnectionHandler(config: ServerConfig) {
             type: "data",
             data: text,
           });
-          break;
+          return;
         }
         case "CMD":
           switch (chunk.code) {
