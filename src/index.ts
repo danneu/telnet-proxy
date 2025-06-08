@@ -1,3 +1,4 @@
+// index.ts - Cleaned version
 import * as ws from "ws";
 import * as net from "net";
 import * as zlib from "zlib";
@@ -7,6 +8,9 @@ import { decodeText } from "./utils/decode-text.js";
 import { z } from "zod";
 import iconv from "iconv-lite";
 import { createHttpServer } from "./http-server.js";
+
+// Server sends DO → You respond WILL or WONT
+// Server sends WILL → You respond DO or DONT
 
 export type ServerConfig = {
   PORT: number;
@@ -20,10 +24,7 @@ export type ServerConfig = {
 const ConnectionOptionsSchema = z.object({
   host: z.string(),
   port: z.coerce.number().optional().default(23),
-  mccp2: z.preprocess(
-    (val) => val === "true",
-    z.boolean().optional().default(false)
-  ),
+  mccp2: z.preprocess((val) => val !== "false", z.boolean().optional()),
   encoding: z
     .enum(["auto", "latin1", "utf8", "gbk", "big5"])
     .optional()
@@ -33,18 +34,20 @@ const ConnectionOptionsSchema = z.object({
 export type ConnectionOptions = z.infer<typeof ConnectionOptionsSchema>;
 
 function createConnectionHandler(config: ServerConfig) {
-  return (socket: ws.WebSocket, req: IncomingMessage) => {
+  return (websocket: ws.WebSocket, req: IncomingMessage) => {
     const url = new URL(req.url!, "ws://localhost");
 
-    const result = ConnectionOptionsSchema.safeParse(urlParamsToRecord(url.searchParams));
+    const result = ConnectionOptionsSchema.safeParse(
+      urlParamsToRecord(url.searchParams),
+    );
 
     if (!result.success) {
-      socket.send(
-        `[telnet-proxy] Error with query param "${result.error.issues[0].path.join(
-          "."
-        )}": ${result.error.issues[0].message}`
-      );
-      socket.close();
+      const message = `Error with query param ${result.error.issues[0].path.join(
+        ".",
+      )}: ${result.error.issues[0].message}`;
+
+      websocket.send(`\r\n[telnet-proxy] ${message}\r\n`);
+      websocket.close();
       return;
     }
 
@@ -54,33 +57,42 @@ function createConnectionHandler(config: ServerConfig) {
       options,
     });
 
-    const telnet = net
-      .connect(options.port, options.host, () => {
-        console.log("telnet connected");
-      })
-      .on("error", (error) => {
-        console.log("telnet connection error:", error);
-        socket.send(`[telnet-proxy] Connection failed: ${error.message}`);
-        socket.close();
-      });
+    // If MCCP2 is enabled, we compress data coming from server
+    let decompressor: zlib.Inflate | null = null;
+
+    const telnet = net.connect(options.port, options.host, () => {
+      console.log("telnet connected");
+    });
+
+    telnet.on("error", (error) => {
+      console.log("telnet connection error:", error);
+      websocket.send(
+        `\r\n[telnet-proxy] Connection failed: ${error.message}\r\n`,
+      );
+      websocket.close();
+    });
 
     telnet.setTimeout(config.TELNET_TIMEOUT);
     telnet.on("timeout", () => {
       telnet.destroy();
-      socket.send("[telnet-proxy] Connection timeout");
-      socket.close();
+      websocket.send(`\r\n[telnet-proxy] Connection timeout\r\n`);
+      websocket.close();
     });
 
-    const parserStream = Parser.createStream(config.PARSER_BUFFER_SIZE);
+    let parserStream = Parser.createStream(config.PARSER_BUFFER_SIZE);
     parserStream.on("data", ondata);
 
     // Our initial pipeline that may be unpiped and repiped later.
     telnet.pipe(parserStream);
 
     function ondata(chunk: Chunk) {
-      console.log("[ondata] recv chunk", prettyChunk(chunk));
       if (chunk.type === "DATA") {
-        console.log("last data:", chunk.data.slice(chunk.data.length - 5));
+        console.log("recv chunk", prettyChunk(chunk));
+      }
+
+      // Only log negotiations and commands, not data chunks
+      if (chunk.type !== "DATA") {
+        console.log("recv chunk", prettyChunk(chunk));
       }
 
       // Negotiate MCCP2
@@ -89,24 +101,60 @@ function createConnectionHandler(config: ServerConfig) {
         chunk.name === "SB" &&
         chunk.target === Cmd.MCCP2
       ) {
-        console.log(
-          "server sent IAC SB MCCP2 IAC SE. setting up new pipeline..."
-        );
+        console.log("MCCP2 compression starting...");
 
-        // Handle the pipeline switch
+        // Extract any buffered data from the parser before destroying it
+        let recoveredBytes: Uint8Array | null = null;
+
+        if ("parser" in parserStream && parserStream.parser) {
+          const bufferLength = parserStream.parser.getBufferLength();
+          if (bufferLength > 0) {
+            recoveredBytes = parserStream.parser.extractBuffer();
+            console.log(
+              `[MCCP2] Recovered ${recoveredBytes.length} bytes from parser buffer`,
+            );
+          }
+        }
+
+        // Disconnect old parser
+        parserStream.removeAllListeners("data");
         telnet.unpipe(parserStream);
-        const decompressor = zlib.createInflate({
-          // Avoids crashing when partial data is flushed
+        parserStream.destroy();
+
+        // Create decompressor for incoming data (server uses zlib with headers)
+        decompressor = zlib.createInflate({
+          // chunkSize: 16 * 1024,
           finishFlush: zlib.constants.Z_SYNC_FLUSH,
         });
 
+        const compressedStreamParser = Parser.createStream(
+          config.PARSER_BUFFER_SIZE,
+        );
+
         decompressor.on("error", (err) => {
-          console.log("Decompression error:", err);
-          socket.send("[telnet-proxy] MCCP2 decompression error");
-          socket.close();
+          // Z_BUF_ERROR on close is normal for MUDs
+          // if (err.code === "Z_BUF_ERROR" && telnet.destroyed) {
+          //   return;
+          // }
+
+          console.error("Decompression error:", err);
+          websocket.send(`\r\n[telnet-proxy] MCCP2 decompression error\r\n`);
+          websocket.close();
         });
 
-        telnet.pipe(decompressor).pipe(parserStream);
+        compressedStreamParser.on("data", ondata);
+
+        // Set up the new pipeline
+        telnet.pipe(decompressor).pipe(compressedStreamParser);
+
+        // Inject recovered bytes
+        if (recoveredBytes && recoveredBytes.length > 0) {
+          decompressor.write(recoveredBytes);
+        }
+
+        parserStream = compressedStreamParser;
+
+        console.log("MCCP2 enabled - server messages are now compressed");
         return;
       }
 
@@ -117,105 +165,186 @@ function createConnectionHandler(config: ServerConfig) {
           if (charset === "latin1") {
             options.encoding = "latin1";
           }
-          socket.send(text);
+          websocket.send(text);
           return;
         }
         case "CMD":
           switch (chunk.code) {
             case Cmd.ARE_YOU_THERE:
+              console.log("Client->Server (Responding to AYT) `Present\\r\\n`");
               telnet.write("Present\r\n");
-              break;
-            default:
-              console.log(`unhandled CMD code: ${chunk.code}`);
-              break;
+              return;
+            case Cmd.GO_AHEAD:
+              // GA marks end of prompt - could be used for line buffering
+              return;
           }
+          console.log(`unhandled CMD code: ${chunk.code}`);
           break;
         case "NEGOTIATION":
           switch (chunk.target) {
+            case Cmd.CHARSET: {
+              // TODO: Handle CHARSET negotiation
+              // Example server message if we DO:
+              // NEGOTIATE SB [ 1, 59, 85, 84, 70, 45, 56 ] ('"\\u0001;UTF-8"')
+              if (chunk.name === "WILL") {
+                console.log("Client->Server IAC DONT CHARSET");
+                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.CHARSET]));
+                return;
+              }
+              break;
+            }
             case Cmd.TERMINAL_SPEED:
-              if (chunk.target === Cmd.WILL) {
-                console.log("sending IAC DONT TERMINAL_SPEED to server");
+              if (chunk.name === "DO") {
+                console.log("Client->Server IAC WONT TERMINAL_SPEED");
                 telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.TERMINAL_SPEED])
+                  Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.TERMINAL_SPEED]),
                 );
+                return;
               }
-              return;
-            case Cmd.WINDOW_SIZE:
-              // Here's how we could negotiate window size:
-              //
-              // const windowCharWidth = 80
-              // const windowCharHeight = 0
-              // const dvWidth = new ArrayBuffer(2)
-              // new DataView(dvWidth).setInt16(0, windowCharWidth, false)
-              // const dvHeight = new ArrayBuffer(2)
-              // new DataView(dvHeight).setInt16(0, windowCharHeight, false)
-              //
-              // const bytes = Uint8Array.from([
-              //   Cmd.IAC,
-              //   Cmd.SB,
-              //   ...new Uint8Array(dvWidth),
-              //   ...new Uint8Array(dvHeight),
-              //   Cmd.IAC,
-              //   Cmd.SE,
-              // ])
-              // telnet.write(bytes)
-              // return
+              break;
+            case Cmd.WINDOW_SIZE: {
+              if (chunk.name === "DO") {
+                console.log("Client->Server IAC WILL WINDOW_SIZE");
+                telnet.write(
+                  Uint8Array.from([Cmd.IAC, Cmd.WILL, Cmd.WINDOW_SIZE]),
+                );
 
-              if (chunk.target === Cmd.WILL) {
-                console.log("sending IAC DONT NAWS to server");
+                // Common terminal size: 80x24, but let's try 100 width
+                const width = 100;
+                const height = 24;
+
+                console.log("Client->Server IAC SB WINDOW_SIZE ... IAC SE");
+                const bytes = Uint8Array.from([
+                  Cmd.IAC,
+                  Cmd.SB,
+                  Cmd.WINDOW_SIZE,
+                  // width as 16-bit big-endian
+                  width >> 8,
+                  width & 0xff,
+                  // height as 16-bit big-endian
+                  height >> 8,
+                  height & 0xff,
+                  Cmd.IAC,
+                  Cmd.SE,
+                ]);
+                telnet.write(bytes);
+                return;
+              }
+              break;
+            }
+            case Cmd.NEW_ENVIRON: {
+              if (chunk.name === "DO") {
+                console.log("Client->Server IAC WONT NEW_ENVIRON");
                 telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.WINDOW_SIZE])
+                  Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.NEW_ENVIRON]),
                 );
+                return;
               }
-              return;
-            case Cmd.NEW_ENVIRON:
-              if (chunk.target === Cmd.WILL) {
-                console.log("sending IAC DONT NEW_ENVIRON to server");
-                telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.NEW_ENVIRON])
+              break;
+            }
+            case Cmd.ECHO: {
+              if (chunk.name === "WILL") {
+                console.log("Client->Server IAC DONT ECHO");
+                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.ECHO]));
+                return;
+              }
+              break;
+            }
+            case Cmd.MSSP: {
+              if (chunk.name === "WILL") {
+                console.log("Client->Server IAC DO MSSP");
+                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSSP]));
+                return;
+              }
+              // Server responded to our DO MSSP negotiation with MSSP data
+              if (chunk.name === "SB" && chunk.target === Cmd.MSSP) {
+                const msspData = decodeMSSP(chunk.data);
+                console.log("MSSP data:", msspData);
+                websocket.send(
+                  JSON.stringify({ type: "mud:mssp", data: msspData }),
                 );
+                return;
               }
-              return;
-            case Cmd.ECHO:
-              if (chunk.target === Cmd.WILL) {
-                console.log("sending IAC DONT ECHO to server");
-                // telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.ECHO]))
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.ECHO]));
+              break;
+            }
+            case Cmd.MXP: {
+              if (chunk.name === "DO") {
+                console.log("Client->Server IAC WONT MXP");
+                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.MXP]));
+                return;
               }
-              return;
+              break;
+            }
+            case Cmd.MSP: {
+              if (chunk.name === "WILL") {
+                console.log("Client->Server IAC DONT MSP");
+                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MSP]));
+                return;
+              }
+              break;
+            }
             case Cmd.MCCP2:
-              if (chunk.target === Cmd.WILL) {
-                console.log("sending IAC DO MCCP2 to server");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
-                // console.log('sending IAC DONT MCCP2 to server')
-                // telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MCCP2]))
+              if (chunk.name === "WILL") {
+                if (options.mccp2) {
+                  console.log("Client->Server IAC DO MCCP2");
+                  telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
+                } else {
+                  console.log("Client->Server IAC DONT MCCP2");
+                  telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MCCP2]));
+                }
+                return;
               }
-              return;
+              break;
             case Cmd.GMCP:
-              if (chunk.target === Cmd.WILL) {
-                console.log("sending IAC DO GMCP to server");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.GMCP]));
+              // TODO: Support GMCP. elephant.org:23 for example
+              if (chunk.name === "WILL") {
+                console.log("Client->Server IAC DONT GMCP");
+                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.GMCP]));
+                return;
               }
-              return;
-            default:
-              console.log("unhandled negotation:", chunk);
-              return;
+              break;
+            default: {
+              // For unhandled negotiations, reject and log them
+
+              // For DO requests we don't handle
+              if (chunk.name === "DO") {
+                console.log(
+                  `** [Auto-reject] Client->Server IAC WONT ${chunk.target}`,
+                );
+                telnet.write(
+                  Uint8Array.from([Cmd.IAC, Cmd.WONT, chunk.target]),
+                );
+                return;
+              }
+              // For WILL requests we don't handle
+              else if (chunk.name === "WILL") {
+                console.log(
+                  `** [Auto-reject] Client->Server IAC DONT ${chunk.target}`,
+                );
+                telnet.write(
+                  Uint8Array.from([Cmd.IAC, Cmd.DONT, chunk.target]),
+                );
+                return;
+              }
+              break;
+            }
           }
+
+          // If we got here, we didn't handle a negotiation
+          console.log("⚠️ Unhandled negotiation:", prettyChunk(chunk));
+          return;
       }
     }
 
-    telnet.on("error", (error) => {
-      console.log("telnet error", error);
-    });
-
     telnet.on("close", () => {
       console.log("telnet close");
-      socket.close();
-    });
 
-    telnet.on("end", () => {
-      console.log("telnet end");
-      socket.close();
+      // Clean up decompressor if MCCP2 was active
+      if (decompressor) {
+        decompressor.end();
+      }
+
+      websocket.close();
     });
 
     // Send NOP's to server to avoid connection close
@@ -226,36 +355,35 @@ function createConnectionHandler(config: ServerConfig) {
       // telnet.write(Uint8Array.from([Cmd.IAC, Cmd.NOP]));
 
       // This seems to work better for Cyberlife. but not sure it actually works to keep conn alive
-      console.log("[heartbeat] sending <space><backspace>");
+      // console.log("[heartbeat] sending <space><backspace>");
       telnet.write(Buffer.from(" \b"));
 
       heartbeatTimeout = setTimeout(heartbeat, config.HEARTBEAT_INTERVAL);
     }
     heartbeatTimeout = setTimeout(heartbeat, config.HEARTBEAT_INTERVAL);
 
-    socket.on("message", (_message: ws.RawData, isBinary: boolean) => {
-      console.log(`[binary=${isBinary}] recv: %s`, _message);
+    websocket.on("message", (_message: ws.RawData, isBinary: boolean) => {
+      clearTimeout(heartbeatTimeout);
+      heartbeatTimeout = setTimeout(heartbeat, config.HEARTBEAT_INTERVAL);
 
+      // Convert message to bytes
       let bytes = isBinary
         ? (_message as Uint8Array)
         : options.encoding === "utf8"
           ? new TextEncoder().encode(_message.toString()) // utf8
           : options.encoding === "gbk" || options.encoding === "big5"
             ? Uint8Array.from(
-                iconv.encode(_message.toString(), options.encoding)
+                iconv.encode(_message.toString(), options.encoding),
               )
             : Uint8Array.from(Buffer.from(_message.toString(), "latin1")); // latin1
+
+      // Escape IAC bytes in user data for telnet transmission
       bytes = escapeIAC(bytes);
 
-      // reset heartbeat timer
-      clearTimeout(heartbeatTimeout);
-      heartbeatTimeout = setTimeout(heartbeat, config.HEARTBEAT_INTERVAL);
-
-      console.log("sending message:", JSON.stringify(bytes));
       telnet.write(bytes);
     });
 
-    socket.on("error", (error) => {
+    websocket.on("error", (error) => {
       console.log("WebSocket error:", error);
       clearTimeout(heartbeatTimeout);
       if (telnet && !telnet.destroyed) {
@@ -263,7 +391,7 @@ function createConnectionHandler(config: ServerConfig) {
       }
     });
 
-    socket.on("close", () => {
+    websocket.on("close", () => {
       console.log("client websocket closed");
       clearTimeout(heartbeatTimeout);
       telnet.end();
@@ -314,30 +442,27 @@ export function createServer(config: ServerConfig) {
 // In telnet protocol, the byte 255 (0xFF) is reserved as IAC (Interpret As Command).
 // When user data contains this byte value, it must be escaped by doubling it.
 // Example: [1, 255, 3] becomes [1, 255, 255, 3]
-//
-// This function efficiently handles the common case where no IACs exist by
-// returning the original data unchanged. When IACs are present, it allocates
-// exactly the right amount of memory (original size + IAC count).
 function escapeIAC(data: Uint8Array): Uint8Array {
-  // Count IAC bytes first to determine exact buffer size needed
-  let iacCount = 0;
-  for (const byte of data) {
-    if (byte === Cmd.IAC) iacCount++;
-  }
+  const escaped = new Uint8Array(data.length * 2);
+  let writeIndex = 0;
+  let foundIAC = false;
 
-  // Optimization: return original data if no escaping needed (common case)
-  if (iacCount === 0) return data;
-
-  // Allocate exact buffer size: original length + one extra byte per IAC
-  const escaped = new Uint8Array(data.length + iacCount);
-  let i = 0;
-  for (const byte of data) {
-    escaped[i++] = byte;
+  for (let i = 0; i < data.length; i++) {
+    const byte = data[i];
+    escaped[writeIndex++] = byte;
     if (byte === Cmd.IAC) {
-      escaped[i++] = Cmd.IAC; // Double the IAC byte
+      escaped[writeIndex++] = Cmd.IAC;
+      foundIAC = true;
     }
   }
-  return escaped;
+
+  // If no IAC bytes were found, we can return the original data.
+  if (!foundIAC) {
+    return data;
+  }
+
+  // Return a view (slice) of the populated part of the new array.
+  return escaped.slice(0, writeIndex);
 }
 
 function urlParamsToRecord(params: URLSearchParams): Record<string, string> {
@@ -349,14 +474,70 @@ function urlParamsToRecord(params: URLSearchParams): Record<string, string> {
 }
 
 function prettyChunk(chunk: Chunk): Chunk & {
-  targetName?: string | undefined;
-  codeName?: string | undefined;
+  targetName?: string;
+  codeName?: string;
+  dataText?: string;
+  dataBytes?: number;
 } {
-  if ("target" in chunk && chunk.target) {
-    return { ...chunk, targetName: Dmc[chunk.target] || "<unknown>" };
+  const pretty = { ...chunk } as Chunk & {
+    targetName?: string;
+    codeName?: string;
+    dataText?: string;
+    dataBytes?: number;
+    data?: Uint8Array;
+  };
+
+  // Add friendly names
+  if ("target" in chunk) {
+    pretty.targetName = Dmc[chunk.target] || `unknown(${chunk.target})`;
   }
-  if ("code" in chunk && chunk.code) {
-    return { ...chunk, codeName: Dmc[chunk.code] || "<unknown>" };
+  if ("code" in chunk) {
+    pretty.codeName = Dmc[chunk.code] || `unknown(${chunk.code})`;
   }
-  return chunk;
+
+  // Handle data
+  if ("data" in chunk && chunk.data) {
+    try {
+      pretty.dataText = new TextDecoder().decode(chunk.data);
+    } catch {
+      pretty.dataText = "<binary data>";
+    }
+    pretty.dataBytes = chunk.data.length;
+    delete pretty.data;
+  }
+
+  return pretty;
+}
+
+// Example data from elephant.org:23
+// 1NAME2Elephant1PLAYERS271UPTIME21748842171
+// { NAME: 'Elephant', PLAYERS: '7', UPTIME: '1748842171' }
+// TODO: https://tintin.mudhalla.net/protocols/mssp/
+function decodeMSSP(data: Uint8Array): Record<string, string> {
+  const MSSP_VAR = 1;
+  const MSSP_VAL = 2;
+  const result: Record<string, string> = Object.create(null);
+  let i = 0;
+
+  while (i < data.length) {
+    if (data[i] === MSSP_VAR) {
+      i++;
+      let key = "";
+      while (i < data.length && data[i] !== MSSP_VAL) {
+        key += String.fromCharCode(data[i]);
+        i++;
+      }
+
+      if (data[i] === MSSP_VAL) {
+        i++;
+        let value = "";
+        while (i < data.length && data[i] !== MSSP_VAR) {
+          value += String.fromCharCode(data[i]);
+          i++;
+        }
+        result[key] = value;
+      }
+    }
+  }
+  return result;
 }

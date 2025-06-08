@@ -1,3 +1,4 @@
+// parser.ts - Modified version with buffer recovery support
 import { Transform } from "stream";
 
 /*
@@ -43,11 +44,14 @@ const Cmd = {
   TIMING_MARK: 6,
   EXTENDED_ASCII: 17,
   TERMINAL_SPEED: 24,
+  TELOPT_EOR: 25,
   WINDOW_SIZE: 31, // https://www.rfc-editor.org/rfc/rfc1073.html Negotiate about window size (NAWS)
+
   REMOTE_FLOW_CONTROL: 33,
   LINEMODE: 34,
   ENVIRON: 36,
   NEW_ENVIRON: 39, // https://www.rfc-editor.org/rfc/rfc1572.html
+
   CHARSET: 42,
   NOP: 241,
   ARE_YOU_THERE: 246,
@@ -58,11 +62,12 @@ const Cmd = {
   MCCP1: 85,
   MCCP2: 86,
   MCCP3: 87,
-  MSP: 90,
+  MSP: 90, // https://www.zuggsoft.com/zmud/msp.htm
   MXP: 91,
   ZMP: 93,
   ATCP: 200,
   GMCP: 201,
+  EOR: 239, // https://tintin.mudhalla.net/protocols/eor/
 };
 
 // Look up friendly code name from a code number
@@ -110,9 +115,21 @@ class Parser {
     this.maxBufferSize = maxBufferSize;
   }
 
-  static createStream(maxBufferSize?: number): Transform {
+  // NEW: Method to extract and clear the internal buffer
+  extractBuffer(): Uint8Array {
+    const extracted = Uint8Array.from(this.buf);
+    this.buf = [];
+    return extracted;
+  }
+
+  // NEW: Method to get buffer length without extracting
+  getBufferLength(): number {
+    return this.buf.length;
+  }
+
+  static createStream(maxBufferSize?: number): Transform & { parser: Parser } {
     const parser = new Parser(maxBufferSize);
-    return new Transform({
+    const stream = new Transform({
       objectMode: true,
       // TODO: Custom flush?
       // flush() {},
@@ -124,19 +141,22 @@ class Parser {
         }
         done();
       },
-    });
+    }) as Transform & { parser: Parser };
+
+    // Expose the parser instance on the stream
+    stream.parser = parser;
+
+    return stream;
   }
 
   push(bytes: Uint8Array | Buffer) {
-    // Check if adding this data would exceed the limit
     if (this.buf.length + bytes.length > this.maxBufferSize) {
       console.warn(
         `Parser buffer overflow (${
           this.buf.length + bytes.length
         } bytes), resetting buffer`,
       );
-      this.buf = []; // Reset buffer to prevent memory exhaustion
-      // Continue processing the new data
+      this.buf = [];
     }
 
     bytes.forEach((b) => {
