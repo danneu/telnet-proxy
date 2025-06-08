@@ -1,4 +1,4 @@
-// parser.ts - Modified version with buffer recovery support
+// parser.ts
 import { Transform } from "stream";
 
 /*
@@ -107,6 +107,10 @@ function match(buf: number[], pattern: (number | "number")[]): boolean {
   return true;
 }
 
+export type ParserStream = Transform & {
+  drain: () => Uint8Array;
+};
+
 class Parser {
   buf: number[] = [];
   maxBufferSize: number;
@@ -115,19 +119,14 @@ class Parser {
     this.maxBufferSize = maxBufferSize;
   }
 
-  // NEW: Method to extract and clear the internal buffer
-  extractBuffer(): Uint8Array {
-    const extracted = Uint8Array.from(this.buf);
+  // Return and reset the internal buffer
+  drain(): Uint8Array {
+    const drained = Uint8Array.from(this.buf);
     this.buf = [];
-    return extracted;
+    return drained;
   }
 
-  // NEW: Method to get buffer length without extracting
-  getBufferLength(): number {
-    return this.buf.length;
-  }
-
-  static createStream(maxBufferSize?: number): Transform & { parser: Parser } {
+  static createStream(maxBufferSize?: number): ParserStream {
     const parser = new Parser(maxBufferSize);
     const stream = new Transform({
       objectMode: true,
@@ -141,10 +140,9 @@ class Parser {
         }
         done();
       },
-    }) as Transform & { parser: Parser };
+    }) as ParserStream;
 
-    // Expose the parser instance on the stream
-    stream.parser = parser;
+    stream.drain = () => parser.drain();
 
     return stream;
   }

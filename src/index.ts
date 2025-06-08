@@ -57,9 +57,6 @@ function createConnectionHandler(config: ServerConfig) {
       options,
     });
 
-    // If MCCP2 is enabled, we compress data coming from server
-    let decompressor: zlib.Inflate | null = null;
-
     const telnet = net.connect(options.port, options.host, () => {
       console.log("telnet connected");
     });
@@ -80,10 +77,14 @@ function createConnectionHandler(config: ServerConfig) {
     });
 
     let parserStream = Parser.createStream(config.PARSER_BUFFER_SIZE);
-    parserStream.on("data", ondata);
 
     // Our initial pipeline that may be unpiped and repiped later.
-    telnet.pipe(parserStream);
+    let currentPipeline: NodeJS.ReadableStream = telnet;
+
+    // Start with telnet -> parser
+    currentPipeline.pipe(parserStream);
+
+    parserStream.on("data", ondata);
 
     function ondata(chunk: Chunk) {
       if (chunk.type === "DATA") {
@@ -95,7 +96,7 @@ function createConnectionHandler(config: ServerConfig) {
         console.log("recv chunk", prettyChunk(chunk));
       }
 
-      // Negotiate MCCP2
+      // Handle MCCP2 compression start
       if (
         chunk.type === "NEGOTIATION" &&
         chunk.name === "SB" &&
@@ -104,55 +105,50 @@ function createConnectionHandler(config: ServerConfig) {
         console.log("MCCP2 compression starting...");
 
         // Extract any buffered data from the parser before destroying it
-        let recoveredBytes: Uint8Array | null = null;
+        const bufferedData = parserStream.drain();
+        console.log(
+          `[MCCP2] Recovered ${bufferedData.length} bytes from parser buffer`,
+        );
 
-        if ("parser" in parserStream && parserStream.parser) {
-          const bufferLength = parserStream.parser.getBufferLength();
-          if (bufferLength > 0) {
-            recoveredBytes = parserStream.parser.extractBuffer();
-            console.log(
-              `[MCCP2] Recovered ${recoveredBytes.length} bytes from parser buffer`,
-            );
-          }
-        }
+        // Unpipe the current pipeline from parser
+        currentPipeline.unpipe(parserStream);
 
-        // Disconnect old parser
-        parserStream.removeAllListeners("data");
-        telnet.unpipe(parserStream);
-        parserStream.destroy();
-
-        // Create decompressor for incoming data (server uses zlib with headers)
-        decompressor = zlib.createInflate({
-          // chunkSize: 16 * 1024,
+        const decompressor = zlib.createInflate({
           finishFlush: zlib.constants.Z_SYNC_FLUSH,
         });
 
-        const compressedStreamParser = Parser.createStream(
-          config.PARSER_BUFFER_SIZE,
-        );
-
         decompressor.on("error", (err) => {
-          // Z_BUF_ERROR on close is normal for MUDs
-          // if (err.code === "Z_BUF_ERROR" && telnet.destroyed) {
-          //   return;
-          // }
-
           console.error("Decompression error:", err);
           websocket.send(`\r\n[telnet-proxy] MCCP2 decompression error\r\n`);
           websocket.close();
         });
 
-        compressedStreamParser.on("data", ondata);
+        // This should happen when server sends Z_FINISH.
+        decompressor.on("end", () => {
+          console.log("MCCP2 compression ended by server");
+          const bufferedData = parserStream.drain();
+          decompressor.unpipe(parserStream);
 
-        // Set up the new pipeline
-        telnet.pipe(decompressor).pipe(compressedStreamParser);
+          // Switch back to direct telnet -> parser pipeline
+          telnet.pipe(parserStream);
+          currentPipeline = telnet;
 
-        // Inject recovered bytes
-        if (recoveredBytes && recoveredBytes.length > 0) {
-          decompressor.write(recoveredBytes);
+          // Re-inject any buffered data
+          if (bufferedData.length > 0) {
+            parserStream.push(bufferedData);
+          }
+
+          console.log("Switched back to uncompressed mode");
+        });
+
+        // Set up new pipeline: telnet -> decompressor -> parser
+        telnet.pipe(decompressor).pipe(parserStream);
+        currentPipeline = decompressor;
+
+        // Feed any buffered data into the decompressor
+        if (bufferedData.length > 0) {
+          decompressor.write(bufferedData);
         }
-
-        parserStream = compressedStreamParser;
 
         console.log("MCCP2 enabled - server messages are now compressed");
         return;
@@ -338,12 +334,6 @@ function createConnectionHandler(config: ServerConfig) {
 
     telnet.on("close", () => {
       console.log("telnet close");
-
-      // Clean up decompressor if MCCP2 was active
-      if (decompressor) {
-        decompressor.end();
-      }
-
       websocket.close();
     });
 
