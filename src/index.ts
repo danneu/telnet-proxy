@@ -1,13 +1,13 @@
-// index.ts - Cleaned version
+// index.ts
 import * as ws from "ws";
 import * as net from "net";
-import * as zlib from "zlib";
 import { Parser, type Chunk, Cmd, Dmc } from "./parser.js";
 import { IncomingMessage } from "http";
 import { decodeText } from "./utils/decode-text.js";
 import { z } from "zod";
 import iconv from "iconv-lite";
 import { createHttpServer } from "./http-server.js";
+import { createPipelineManager, PipelineManager } from "./pipeline-manager.js";
 
 // Server sends DO → You respond WILL or WONT
 // Server sends WILL → You respond DO or DONT
@@ -17,6 +17,7 @@ export type ServerConfig = {
   HEARTBEAT_INTERVAL: number;
   TELNET_TIMEOUT: number;
   PARSER_BUFFER_SIZE: number;
+  plugins: Plugin[];
 };
 
 // https://users.cs.cf.ac.uk/Dave.Marshall/Internet/node141.html
@@ -57,14 +58,6 @@ function createConnectionHandler(config: ServerConfig) {
 
     const options = result.data;
 
-    type MessageToClient =
-      | {
-          type: "data";
-          data: string;
-        }
-      | { type: "error"; message: string }
-      | { type: "mud:mssp"; data: Record<string, string> };
-
     // Always use this instead of websocket.send() directly.
     function sendToClient(message: MessageToClient) {
       switch (options.format) {
@@ -74,7 +67,7 @@ function createConnectionHandler(config: ServerConfig) {
               websocket.send(message.data);
               break;
             case "error":
-              // use asni red color
+              // use ansi red color
               websocket.send(
                 `\x1b[31m[telnet-proxy] Error: ${message.message}\x1b[0m\r\n`,
               );
@@ -125,90 +118,66 @@ function createConnectionHandler(config: ServerConfig) {
     });
 
     let parserStream = Parser.createStream(config.PARSER_BUFFER_SIZE);
+    const pipelineManager = createPipelineManager(telnet, parserStream);
+
+    const pluginContext: PluginContext = {
+      sendToServer: (data) => {
+        telnet.write(data);
+      },
+      sendToClient,
+      pipeline: pipelineManager,
+    };
+
+    // Initialize plugins
+    const plugins = config.plugins.map((createPlugin) => {
+      const plugin = createPlugin(pluginContext);
+      console.log("Initialized plugin", plugin.name);
+      return plugin;
+    });
 
     // Our initial pipeline that may be unpiped and repiped later.
-    let currentPipeline: NodeJS.ReadableStream = telnet;
+    // let currentPipeline: NodeJS.ReadableStream = telnet;
 
     // Start with telnet -> parser
-    currentPipeline.pipe(parserStream);
+    // currentPipeline.pipe(parserStream);
 
-    parserStream.on("data", ondata);
-
-    function ondata(chunk: Chunk) {
-      if (chunk.type === "DATA") {
-        console.log("recv chunk", prettyChunk(chunk));
-      }
-
-      // Only log negotiations and commands, not data chunks
+    parserStream.on("data", (chunk: Chunk) => {
+      // Log non-data chunks
       if (chunk.type !== "DATA") {
         console.log("recv chunk", prettyChunk(chunk));
       }
 
-      // Handle MCCP2 compression start
-      if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.name === "SB" &&
-        chunk.target === Cmd.MCCP2
-      ) {
-        console.log("MCCP2 compression starting...");
-
-        // Extract any buffered data from the parser before destroying it
-        const bufferedData = parserStream.drain();
-        console.log(
-          `[MCCP2] Recovered ${bufferedData.length} bytes from parser buffer`,
-        );
-
-        // Unpipe the current pipeline from parser
-        currentPipeline.unpipe(parserStream);
-
-        const decompressor = zlib.createInflate({
-          finishFlush: zlib.constants.Z_SYNC_FLUSH,
-        });
-
-        decompressor.on("error", (err) => {
-          console.error("Decompression error:", err);
-          sendToClient({
-            type: "error",
-            message: "MCCP2 decompression error",
-          });
-          websocket.close();
-        });
-
-        // This should happen when server sends Z_FINISH.
-        decompressor.on("end", () => {
-          console.log("MCCP2 compression ended by server");
-          const bufferedData = parserStream.drain();
-          decompressor.unpipe(parserStream);
-
-          // Switch back to direct telnet -> parser pipeline
-          telnet.pipe(parserStream);
-          currentPipeline = telnet;
-
-          // Re-inject any buffered data
-          if (bufferedData.length > 0) {
-            parserStream.push(bufferedData);
-          }
-
-          console.log("Switched back to uncompressed mode");
-        });
-
-        // Set up new pipeline: telnet -> decompressor -> parser
-        telnet.pipe(decompressor).pipe(parserStream);
-        currentPipeline = decompressor;
-
-        // Feed any buffered data into the decompressor
-        if (bufferedData.length > 0) {
-          decompressor.write(bufferedData);
+      // Let plugins handle the chunk first
+      let handled = false;
+      for (const plugin of plugins) {
+        if (handled) {
+          break;
         }
+        if (plugin.onServerChunk) {
+          const result = plugin.onServerChunk(chunk);
+          switch (result.type) {
+            case "handled":
+              handled = true;
+              break;
+            case "continue":
+              continue;
+            default: {
+              const exhaustive: never = result;
+              throw new Error(`Invalid plugin result: ${exhaustive}`);
+            }
+          }
+        }
+      }
 
-        console.log("MCCP2 enabled - server messages are now compressed");
+      // If no plugin handled it, use default handling
+
+      if (handled) {
         return;
       }
 
       switch (chunk.type) {
         case "DATA": {
           const { text, charset } = decodeText(chunk.data, options.encoding);
-          // utf-8 can succeed on latin1 data, so we only know if we're in latin1 if utf-8 eventually fails.
           if (charset === "latin1") {
             options.encoding = "latin1";
           }
@@ -216,203 +185,63 @@ function createConnectionHandler(config: ServerConfig) {
             type: "data",
             data: text,
           });
-          return;
+          break;
         }
         case "CMD":
           switch (chunk.code) {
             case Cmd.ARE_YOU_THERE:
-              console.log("Client->Server (Responding to AYT) `Present\\r\\n`");
+              console.log(
+                `Client->Server (Responding to AYT): "Present\\r\\n"`,
+              );
               telnet.write("Present\r\n");
-              return;
+              break;
             case Cmd.GO_AHEAD:
-              // GA marks end of prompt - could be used for line buffering
+              // GA marks end of prompt; nothing to do
               return;
+            default:
+              console.log(`⚠️ Unhandled CMD code: ${chunk.code}`);
           }
-          console.log(`unhandled CMD code: ${chunk.code}`);
           break;
         case "NEGOTIATION":
-          switch (chunk.target) {
-            case Cmd.CHARSET: {
-              // TODO: Handle CHARSET negotiation
-              // Example server message if we DO:
-              // NEGOTIATE SB [ 1, 59, 85, 84, 70, 45, 56 ] ('"\\u0001;UTF-8"')
-              if (chunk.name === "WILL") {
-                console.log("Client->Server IAC DONT CHARSET");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.CHARSET]));
-                return;
-              }
-              break;
-            }
-            case Cmd.TERMINAL_SPEED:
-              if (chunk.name === "DO") {
-                console.log("Client->Server IAC WONT TERMINAL_SPEED");
-                telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.TERMINAL_SPEED]),
-                );
-                return;
-              }
-              break;
-            case Cmd.WINDOW_SIZE: {
-              if (chunk.name === "DO") {
-                console.log("Client->Server IAC WILL WINDOW_SIZE");
-                telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.WILL, Cmd.WINDOW_SIZE]),
-                );
+          // Auto-reject any unhandled negotiations
 
-                // Common terminal size: 80x24, but let's try 100 width
-                const width = 100;
-                const height = 24;
-
-                console.log("Client->Server IAC SB WINDOW_SIZE ... IAC SE");
-                const bytes = Uint8Array.from([
-                  Cmd.IAC,
-                  Cmd.SB,
-                  Cmd.WINDOW_SIZE,
-                  // width as 16-bit big-endian
-                  width >> 8,
-                  width & 0xff,
-                  // height as 16-bit big-endian
-                  height >> 8,
-                  height & 0xff,
-                  Cmd.IAC,
-                  Cmd.SE,
-                ]);
-                telnet.write(bytes);
-                return;
-              }
-              break;
-            }
-            case Cmd.NEW_ENVIRON: {
-              if (chunk.name === "DO") {
-                console.log("Client->Server IAC WONT NEW_ENVIRON");
-                telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.NEW_ENVIRON]),
-                );
-                return;
-              }
-              break;
-            }
-            case Cmd.ECHO: {
-              if (chunk.name === "WILL") {
-                console.log("Client->Server IAC DONT ECHO");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.ECHO]));
-                return;
-              }
-              break;
-            }
-            case Cmd.MSSP: {
-              if (chunk.name === "WILL") {
-                console.log("Client->Server IAC DO MSSP");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSSP]));
-                return;
-              }
-              // Server responded to our DO MSSP negotiation with MSSP data
-              if (chunk.name === "SB" && chunk.target === Cmd.MSSP) {
-                const data = decodeMSSP(chunk.data);
-                console.log("MSSP data:", data);
-                sendToClient({
-                  type: "mud:mssp",
-                  data,
-                });
-                return;
-              }
-              break;
-            }
-            case Cmd.MXP: {
-              if (chunk.name === "DO") {
-                console.log("Client->Server IAC WONT MXP");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.MXP]));
-                return;
-              }
-              break;
-            }
-            case Cmd.MSP: {
-              if (chunk.name === "WILL") {
-                console.log("Client->Server IAC DONT MSP");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MSP]));
-                return;
-              }
-              break;
-            }
-            case Cmd.MCCP2:
-              if (chunk.name === "WILL") {
-                if (options.mccp2) {
-                  console.log("Client->Server IAC DO MCCP2");
-                  telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
-                } else {
-                  console.log("Client->Server IAC DONT MCCP2");
-                  telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MCCP2]));
-                }
-                return;
-              }
-              break;
-            case Cmd.GMCP:
-              // TODO: Support GMCP. elephant.org:23 for example
-              if (chunk.name === "WILL") {
-                console.log("Client->Server IAC DONT GMCP");
-                telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.GMCP]));
-                return;
-              }
-              break;
-            default: {
-              // For unhandled negotiations, reject and log them
-
-              // For DO requests we don't handle
-              if (chunk.name === "DO") {
-                console.log(
-                  `** [Auto-reject] Client->Server IAC WONT ${chunk.target}`,
-                );
-                telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.WONT, chunk.target]),
-                );
-                return;
-              }
-              // For WILL requests we don't handle
-              else if (chunk.name === "WILL") {
-                console.log(
-                  `** [Auto-reject] Client->Server IAC DONT ${chunk.target}`,
-                );
-                telnet.write(
-                  Uint8Array.from([Cmd.IAC, Cmd.DONT, chunk.target]),
-                );
-                return;
-              }
-              break;
-            }
+          // For DO requests we don't handle
+          if (chunk.name === "DO") {
+            console.log(
+              `⚠️ [Auto-reject] Client->Server IAC WONT ${chunk.target}`,
+            );
+            telnet.write(Uint8Array.from([Cmd.IAC, Cmd.WONT, chunk.target]));
+            return;
           }
-
-          // If we got here, we didn't handle a negotiation
-          console.log("⚠️ Unhandled negotiation:", prettyChunk(chunk));
-          return;
+          // For WILL requests we don't handle
+          else if (chunk.name === "WILL") {
+            console.log(
+              `⚠️ [Auto-reject] Client->Server IAC DONT ${chunk.target}`,
+            );
+            telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, chunk.target]));
+            return;
+          }
+          break;
+        default: {
+          const exhaustive: never = chunk;
+          throw new Error(`Invalid chunk type: ${exhaustive}`);
+        }
       }
-    }
+
+      console.log("⚠️ Unhandled chunk:", prettyChunk(chunk));
+    });
 
     telnet.on("close", () => {
       console.log("telnet close");
+
+      for (const plugin of plugins) {
+        plugin.onClose?.();
+      }
+
       websocket.close();
     });
 
-    // Send data to server to avoid idle timeout
-    let heartbeatTimeout: NodeJS.Timeout;
-    function heartbeat() {
-      // console.log("sending heartbeat to ", options.host, ":", options.port);
-
-      // :: Cyberlife game seems to have problem with my next command after the IAC NOP heartbeat
-      // console.log("[heartbeat] sending NOP");
-      // telnet.write(Uint8Array.from([Cmd.IAC, Cmd.NOP]));
-
-      // :: This seems to work better for Cyberlife. but not sure it actually works to keep conn alive
-      // console.log("[heartbeat] sending <space><backspace>");
-      telnet.write(Buffer.from(" \b"));
-
-      heartbeatTimeout = setTimeout(heartbeat, config.HEARTBEAT_INTERVAL);
-    }
-    heartbeatTimeout = setTimeout(heartbeat, config.HEARTBEAT_INTERVAL);
-
     websocket.on("message", (_message: ws.RawData, isBinary: boolean) => {
-      clearTimeout(heartbeatTimeout);
-      heartbeatTimeout = setTimeout(heartbeat, config.HEARTBEAT_INTERVAL);
-
       // Convert message to bytes
       let bytes = isBinary
         ? (_message as Uint8Array)
@@ -424,15 +253,35 @@ function createConnectionHandler(config: ServerConfig) {
               )
             : Uint8Array.from(Buffer.from(_message.toString(), "latin1")); // latin1
 
-      // Escape IAC bytes in user data for telnet transmission
-      bytes = escapeIAC(bytes);
+      console.log("websocket on message", _message.toString());
 
-      telnet.write(bytes);
+      for (const plugin of plugins) {
+        const result = plugin.onClientMessage?.(bytes);
+        switch (result?.type) {
+          case undefined:
+          case "continue":
+            continue;
+          case "transform":
+            bytes = result.data;
+            break;
+          case "handled":
+            return;
+          default: {
+            const exhaustive: never = result;
+            throw new Error(`Invalid plugin result: ${exhaustive}`);
+          }
+        }
+      }
+
+      telnet.write(
+        // Escape IAC bytes in user data for telnet transmission
+        // Plugins get pre-escaped bytes
+        escapeIAC(bytes),
+      );
     });
 
     websocket.on("error", (error) => {
       console.log("WebSocket error:", error);
-      clearTimeout(heartbeatTimeout);
       if (telnet && !telnet.destroyed) {
         telnet.destroy();
       }
@@ -440,7 +289,6 @@ function createConnectionHandler(config: ServerConfig) {
 
     websocket.on("close", () => {
       console.log("client websocket closed");
-      clearTimeout(heartbeatTimeout);
       telnet.end();
     });
   };
@@ -556,35 +404,67 @@ function prettyChunk(chunk: Chunk): Chunk & {
   return pretty;
 }
 
-// Example data from elephant.org:23
-// 1NAME2Elephant1PLAYERS271UPTIME21748842171
-// { NAME: 'Elephant', PLAYERS: '7', UPTIME: '1748842171' }
-// TODO: https://tintin.mudhalla.net/protocols/mssp/
-function decodeMSSP(data: Uint8Array): Record<string, string> {
-  const MSSP_VAR = 1;
-  const MSSP_VAL = 2;
-  const result: Record<string, string> = Object.create(null);
-  let i = 0;
-
-  while (i < data.length) {
-    if (data[i] === MSSP_VAR) {
-      i++;
-      let key = "";
-      while (i < data.length && data[i] !== MSSP_VAL) {
-        key += String.fromCharCode(data[i]);
-        i++;
-      }
-
-      if (data[i] === MSSP_VAL) {
-        i++;
-        let value = "";
-        while (i < data.length && data[i] !== MSSP_VAR) {
-          value += String.fromCharCode(data[i]);
-          i++;
-        }
-        result[key] = value;
-      }
+type MessageToClient =
+  | {
+      type: "data";
+      data: string;
     }
-  }
-  return result;
-}
+  | { type: "error"; message: string }
+  | { type: "mud:mssp"; data: Record<string, string> };
+
+////////////////////////////////////////////////////////////
+
+// plugin-types.ts
+// import { Transform, Duplex } from "stream";
+
+export type PluginContext = {
+  // Send data to the telnet server
+  sendToServer(data: Uint8Array): void;
+
+  // Send text to the websocket client
+  sendToClient(message: MessageToClient): void;
+
+  // Get/set connection options
+  // options: Record<string, any>;
+
+  // Pipeline management
+  pipeline: PipelineManager;
+  // pipeline: {
+  //   // Add a transform to the pipeline, returns removal function
+  //   add(transform: Transform): () => void;
+
+  //   // Check if a transform is in the pipeline
+  //   has(transform: Transform): boolean;
+
+  //   // Get current pipeline state (for debugging)
+  //   inspect(): string[];
+  // };
+};
+
+export type ClientMessageResult =
+  // Plugin handled the message so no other plugins should
+  | { type: "handled" }
+  | { type: "continue" }
+  | { type: "transform"; data: Uint8Array };
+
+export type ServerChunkHandlerResult =
+  | { type: "handled" }
+  | { type: "continue" };
+
+export type PluginReturn = {
+  name: string;
+
+  // Called for each chunk from server
+  // Return true to indicate chunk was handled (stop processing)
+  onServerChunk?(chunk: Chunk): ServerChunkHandlerResult;
+
+  // Called for each message from client
+  // Return null to consume, Uint8Array to transform, void to pass through
+  onClientMessage?(data: Uint8Array): ClientMessageResult;
+
+  // Called when connection closes
+  onClose?(): void;
+};
+
+export type PluginFactory<T = void> = (config: T) => Plugin;
+export type Plugin = (ctx: PluginContext) => PluginReturn;

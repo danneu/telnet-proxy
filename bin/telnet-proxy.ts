@@ -2,6 +2,16 @@
 import { createServer } from "../src/index.js";
 import { z } from "zod";
 import "dotenv/config";
+import heartbeat from "../src/plugins/heartbeat.js";
+import mccp2 from "../src/plugins/mud/mccp2.js";
+import terminalSpeed from "../src/plugins/terminalSpeed.js";
+import windowSize from "../src/plugins/windowSize.js";
+import newEnviron from "../src/plugins/newEnviron.js";
+import echo from "../src/plugins/echo.js";
+import mssp from "../src/plugins/mud/mssp.js";
+import mxp from "../src/plugins/mud/mxp.js";
+import gmcp from "../src/plugins/mud/gmcp.js";
+import charset from "../src/plugins/charset.js";
 
 const ConfigSchema = z.object({
   PORT: z.coerce.number().default(8888),
@@ -21,7 +31,25 @@ if (!result.success) {
 }
 
 const config = result.data;
-const server = createServer(config);
+const server = createServer({
+  ...config,
+  plugins: [
+    // telnet negotiation we reject
+    newEnviron(false),
+    echo(false),
+    charset(false),
+    // telnet negotiation we respond to
+    terminalSpeed(),
+    windowSize({ width: 100, height: 24 }),
+    // extra plugins
+    heartbeat({ interval: config.HEARTBEAT_INTERVAL }),
+    // mud plugins
+    mxp(false),
+    gmcp(false),
+    mssp(),
+    mccp2(),
+  ],
+});
 server
   .listen()
   .then(() => {
