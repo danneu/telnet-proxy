@@ -128,10 +128,19 @@ function createConnectionHandler(config: ServerConfig) {
       pipeline: pipelineManager,
     };
 
-    // Initialize plugins
+    // Initialize plugins; plugin names must be unique
+    const pluginNameSet = new Set<string>();
     const plugins = config.plugins.map((createPlugin) => {
       const plugin = createPlugin(pluginContext);
       console.log("Initialized plugin", plugin.name);
+
+      // Check for duplicate plugin names
+      if (pluginNameSet.has(plugin.name)) {
+        throw new Error(`Duplicate plugin name: "${plugin.name}"`);
+      } else {
+        pluginNameSet.add(plugin.name);
+      }
+
       return plugin;
     });
 
