@@ -24,6 +24,7 @@ export type ServerConfig = {
 const ConnectionOptionsSchema = z.object({
   host: z.string(),
   port: z.coerce.number().optional().default(23),
+  format: z.enum(["raw", "json"]).optional().default("raw"),
   mccp2: z.preprocess((val) => val !== "false", z.boolean().optional()),
   encoding: z
     .enum(["auto", "latin1", "utf8", "gbk", "big5"])
@@ -46,12 +47,55 @@ function createConnectionHandler(config: ServerConfig) {
         ".",
       )}: ${result.error.issues[0].message}`;
 
-      websocket.send(`\r\n[telnet-proxy] ${message}\r\n`);
+      sendToClient({
+        type: "error",
+        message,
+      });
       websocket.close();
       return;
     }
 
     const options = result.data;
+
+    type MessageToClient =
+      | {
+          type: "data";
+          data: string;
+        }
+      | { type: "error"; message: string }
+      | { type: "mud:mssp"; data: Record<string, string> };
+
+    // Always use this instead of websocket.send() directly.
+    function sendToClient(message: MessageToClient) {
+      switch (options.format) {
+        case "raw":
+          switch (message.type) {
+            case "data":
+              websocket.send(message.data);
+              break;
+            case "error":
+              // use asni red color
+              websocket.send(
+                `\x1b[31m[telnet-proxy] Error: ${message.message}\x1b[0m\r\n`,
+              );
+              break;
+            case "mud:mssp":
+              break;
+            default: {
+              const exhaustive: never = message;
+              throw new Error(`Invalid message type: ${exhaustive}`);
+            }
+          }
+          break;
+        case "json":
+          websocket.send(JSON.stringify(message));
+          break;
+        default: {
+          const exhaustive: never = options.format;
+          throw new Error(`Invalid format: ${exhaustive}`);
+        }
+      }
+    }
 
     console.log("client connected", {
       options,
@@ -63,16 +107,20 @@ function createConnectionHandler(config: ServerConfig) {
 
     telnet.on("error", (error) => {
       console.log("telnet connection error:", error);
-      websocket.send(
-        `\r\n[telnet-proxy] Connection failed: ${error.message}\r\n`,
-      );
+      sendToClient({
+        type: "error",
+        message: `Connection failed: ${error.message}`,
+      });
       websocket.close();
     });
 
     telnet.setTimeout(config.TELNET_TIMEOUT);
     telnet.on("timeout", () => {
       telnet.destroy();
-      websocket.send(`\r\n[telnet-proxy] Connection timeout\r\n`);
+      sendToClient({
+        type: "error",
+        message: "Connection timeout",
+      });
       websocket.close();
     });
 
@@ -119,7 +167,10 @@ function createConnectionHandler(config: ServerConfig) {
 
         decompressor.on("error", (err) => {
           console.error("Decompression error:", err);
-          websocket.send(`\r\n[telnet-proxy] MCCP2 decompression error\r\n`);
+          sendToClient({
+            type: "error",
+            message: "MCCP2 decompression error",
+          });
           websocket.close();
         });
 
@@ -161,7 +212,10 @@ function createConnectionHandler(config: ServerConfig) {
           if (charset === "latin1") {
             options.encoding = "latin1";
           }
-          websocket.send(text);
+          sendToClient({
+            type: "data",
+            data: text,
+          });
           return;
         }
         case "CMD":
@@ -254,11 +308,12 @@ function createConnectionHandler(config: ServerConfig) {
               }
               // Server responded to our DO MSSP negotiation with MSSP data
               if (chunk.name === "SB" && chunk.target === Cmd.MSSP) {
-                const msspData = decodeMSSP(chunk.data);
-                console.log("MSSP data:", msspData);
-                websocket.send(
-                  JSON.stringify({ type: "mud:mssp", data: msspData }),
-                );
+                const data = decodeMSSP(chunk.data);
+                console.log("MSSP data:", data);
+                sendToClient({
+                  type: "mud:mssp",
+                  data,
+                });
                 return;
               }
               break;
@@ -337,14 +392,16 @@ function createConnectionHandler(config: ServerConfig) {
       websocket.close();
     });
 
-    // Send NOP's to server to avoid connection close
+    // Send data to server to avoid idle timeout
     let heartbeatTimeout: NodeJS.Timeout;
     function heartbeat() {
+      // console.log("sending heartbeat to ", options.host, ":", options.port);
+
+      // :: Cyberlife game seems to have problem with my next command after the IAC NOP heartbeat
       // console.log("[heartbeat] sending NOP");
-      // Cyberlife game seems to have problem with my next command after the IAC NOP heartbeat
       // telnet.write(Uint8Array.from([Cmd.IAC, Cmd.NOP]));
 
-      // This seems to work better for Cyberlife. but not sure it actually works to keep conn alive
+      // :: This seems to work better for Cyberlife. but not sure it actually works to keep conn alive
       // console.log("[heartbeat] sending <space><backspace>");
       telnet.write(Buffer.from(" \b"));
 
