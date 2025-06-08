@@ -4,7 +4,7 @@ import iconv from "iconv-lite";
 // We'll try to decode it as utf-8 and fallback to latin1 if it fails.
 export function decodeText(
   data: Uint8Array,
-  knownCharset?: "auto" | "latin1" | "utf8" | "gbk" | "big5"
+  knownCharset?: "auto" | "latin1" | "utf8" | "gbk" | "big5",
 ): {
   text: string;
   charset: "latin1" | "utf8" | "gbk" | "big5";
