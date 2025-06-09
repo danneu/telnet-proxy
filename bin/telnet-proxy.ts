@@ -12,6 +12,8 @@ import mssp from "../src/plugins/mud/mssp.js";
 import mxp from "../src/plugins/mud/mxp.js";
 import gmcp from "../src/plugins/mud/gmcp.js";
 import charset from "../src/plugins/charset.js";
+import msp from "../src/plugins/mud/msp.js";
+import msdp from "../src/plugins/mud/msdp.js";
 
 const ConfigSchema = z.object({
   PORT: z.coerce.number().default(8888),
@@ -33,6 +35,7 @@ if (!result.success) {
 const config = result.data;
 const server = createServer({
   ...config,
+  logIncomingData: "control",
   plugins: [
     // telnet negotiation we reject
     newEnviron(false),
@@ -47,7 +50,14 @@ const server = createServer({
     mxp(false),
     gmcp(false),
     mssp(),
-    mccp2(),
+    mccp2(true),
+    msp(false),
+    msdp({
+      enabled: true,
+      onVariable: (name, value) => {
+        console.log(`MSDP variable ${name} received:`, value);
+      },
+    }),
   ],
 });
 server

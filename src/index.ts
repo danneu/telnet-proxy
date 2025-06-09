@@ -19,6 +19,8 @@ export type ServerConfig = {
   TELNET_TIMEOUT: number;
   PARSER_BUFFER_SIZE: number;
   plugins: ((ctx: PluginContext) => Plugin)[];
+  // control is negotiation and commands like AYT, GA, etc. since other data is noisy
+  logIncomingData: "none" | "all" | "control";
 };
 
 // https://users.cs.cf.ac.uk/Dave.Marshall/Internet/node141.html
@@ -158,9 +160,24 @@ function createConnectionHandler(config: ServerConfig) {
     });
 
     parserStream.on("data", (chunk: Chunk) => {
-      // Log non-data chunks
-      if (chunk.type !== "DATA") {
-        console.log("recv chunk", prettyChunk(chunk));
+      switch (config.logIncomingData) {
+        case "none":
+          // log nothing
+          break;
+        case "all":
+          // log everything
+          console.log("recv chunk", prettyChunk(chunk));
+          break;
+        case "control":
+          // log non-DATA chunks
+          if (chunk.type !== "DATA") {
+            console.log("recv chunk", prettyChunk(chunk));
+          }
+          break;
+        default: {
+          const exhaustive: never = config.logIncomingData;
+          throw new Error(`Invalid logIncomingData: ${exhaustive}`);
+        }
       }
 
       // Let plugins handle the chunk first
@@ -234,6 +251,11 @@ function createConnectionHandler(config: ServerConfig) {
             console.log(
               `⚠️ [Auto-reject] Client->Server IAC DONT ${chunk.target}`,
             );
+            telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, chunk.target]));
+            return;
+          } else if (chunk.name === "DONT" || chunk.name === "WONT") {
+            // We just confirm with server by responding DONT back to DONT | WONT
+            console.log(`[Auto-reply] Client->Server IAC DONT ${chunk.target}`);
             telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, chunk.target]));
             return;
           }

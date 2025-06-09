@@ -4,7 +4,7 @@ import * as zlib from "zlib";
 
 const PLUGIN_NAME = "mccp2";
 
-const mccp2: PluginFactory<void> = () => (ctx) => {
+const mccp2: PluginFactory<boolean> = (enabled) => (ctx) => {
   let removeMiddleware: (() => void) | null = null;
 
   const onServerChunk = (chunk: Chunk): ServerChunkHandlerResult => {
@@ -14,12 +14,16 @@ const mccp2: PluginFactory<void> = () => (ctx) => {
       chunk.name === "WILL" &&
       chunk.target === Cmd.MCCP2
     ) {
-      console.log(`[${PLUGIN_NAME}]: Accepting compression`);
-      ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
+      if (enabled) {
+        console.log(`[${PLUGIN_NAME}]: Accepting compression`);
+        ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
+      } else {
+        console.log(`[${PLUGIN_NAME}]: Rejecting compression`);
+        ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DONT, Cmd.MCCP2]));
+      }
       return { type: "handled" };
     } else if (
       // Handle compression start
-
       chunk.type === "NEGOTIATION" &&
       chunk.name === "SB" &&
       chunk.target === Cmd.MCCP2

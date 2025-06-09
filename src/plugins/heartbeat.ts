@@ -16,7 +16,7 @@ const heartbeat: PluginFactory<{
       // telnet.write(Uint8Array.from([Cmd.IAC, Cmd.NOP]));
 
       // :: This seems to work better for Cyberlife. but not sure it actually works to keep conn alive
-      console.log("[heartbeat] sending <space><backspace>");
+      // console.log("[heartbeat] sending <space><backspace>");
       ctx.sendToServer(Buffer.from(" \b"));
       timeout = setTimeout(sendHeartbeat, interval);
     }
@@ -24,7 +24,7 @@ const heartbeat: PluginFactory<{
     return {
       name: "heartbeat",
       onClientMessage: () => {
-        console.log("Heartbeat plugin onClientMessage");
+        // console.log("Heartbeat plugin onClientMessage");
         clearTimeout(timeout);
         timeout = setTimeout(sendHeartbeat, interval);
         return { type: "continue" };

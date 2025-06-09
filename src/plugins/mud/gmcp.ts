@@ -1,16 +1,9 @@
-// case Cmd.GMCP:
-//   // TODO: Support GMCP. elephant.org:23 for example
-//   if (chunk.name === "WILL") {
-//     console.log("Client->Server IAC DONT GMCP");
-//     telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.GMCP]));
-//     return;
-//   }
-//   break;
+// https://tintin.mudhalla.net/protocols/gmcp/
 
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 
-const gmcp: PluginFactory<false> = (_config) => (ctx) => {
+const gmcp: PluginFactory<boolean> = (enabled) => (ctx) => {
   return {
     name: "gmcp",
     onServerChunk: (chunk) => {
@@ -19,8 +12,13 @@ const gmcp: PluginFactory<false> = (_config) => (ctx) => {
         chunk.name === "WILL" &&
         chunk.target === Cmd.GMCP
       ) {
-        console.log("[gmcp]: Client->Server IAC DONT GMCP");
-        ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.GMCP]));
+        if (enabled) {
+          console.log("[gmcp]: Client->Server IAC DO GMCP");
+          ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.GMCP]));
+        } else {
+          console.log("[gmcp]: Client->Server IAC DONT GMCP");
+          ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.GMCP]));
+        }
         return { type: "handled" };
       }
       return { type: "continue" };
