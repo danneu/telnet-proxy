@@ -29,6 +29,10 @@ jobs:
       
       - run: pnpm test
       
-      - run: pnpm publish --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: pnpm run build
+      
+      # `master` branch - uses version from package.json
+      - if: github.ref == 'refs/heads/master'
+        uses: JS-DevTools/npm-publish@v3
+        with:
+          token: ${{ secrets.NPM_TOKEN }}
