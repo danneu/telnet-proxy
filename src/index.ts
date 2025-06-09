@@ -7,7 +7,8 @@ import { decodeText } from "./utils/decode-text.js";
 import { z } from "zod";
 import iconv from "iconv-lite";
 import { createHttpServer } from "./http-server.js";
-import { createPipelineManager, PipelineManager } from "./pipeline-manager.js";
+import { createPipelineManager } from "./pipeline-manager.js";
+import { Transform } from "stream";
 
 // Server sends DO → You respond WILL or WONT
 // Server sends WILL → You respond DO or DONT
@@ -17,7 +18,7 @@ export type ServerConfig = {
   HEARTBEAT_INTERVAL: number;
   TELNET_TIMEOUT: number;
   PARSER_BUFFER_SIZE: number;
-  plugins: Plugin[];
+  plugins: ((ctx: PluginContext) => Plugin)[];
 };
 
 // https://users.cs.cf.ac.uk/Dave.Marshall/Internet/node141.html
@@ -118,19 +119,32 @@ function createConnectionHandler(config: ServerConfig) {
     });
 
     let parserStream = Parser.createStream(config.PARSER_BUFFER_SIZE);
-    const pipelineManager = createPipelineManager(telnet, parserStream);
-
-    const pluginContext: PluginContext = {
-      sendToServer: (data) => {
-        telnet.write(data);
+    const pipelineManager = createPipelineManager(
+      telnet,
+      parserStream,
+      (owner, error) => {
+        sendToClient({
+          type: "error",
+          message: `Pipeline error for plugin "${owner}": ${error.message}`,
+        });
       },
-      sendToClient,
-      pipeline: pipelineManager,
-    };
+    );
 
     // Initialize plugins; plugin names must be unique
     const pluginNameSet = new Set<string>();
     const plugins = config.plugins.map((createPlugin) => {
+      const pluginContext: PluginContext = {
+        sendToServer: (data) => {
+          telnet.write(data);
+        },
+        sendToClient,
+        addMiddleware: (transform) => {
+          pipelineManager.add(plugin.name, transform);
+          return () => {
+            pipelineManager.remove(plugin.name);
+          };
+        },
+      };
       const plugin = createPlugin(pluginContext);
       console.log("Initialized plugin", plugin.name);
 
@@ -143,12 +157,6 @@ function createConnectionHandler(config: ServerConfig) {
 
       return plugin;
     });
-
-    // Our initial pipeline that may be unpiped and repiped later.
-    // let currentPipeline: NodeJS.ReadableStream = telnet;
-
-    // Start with telnet -> parser
-    // currentPipeline.pipe(parserStream);
 
     parserStream.on("data", (chunk: Chunk) => {
       // Log non-data chunks
@@ -381,13 +389,13 @@ function prettyChunk(chunk: Chunk): Chunk & {
   targetName?: string;
   codeName?: string;
   dataText?: string;
-  dataBytes?: number;
+  dataLength?: number;
 } {
   const pretty = { ...chunk } as Chunk & {
     targetName?: string;
     codeName?: string;
     dataText?: string;
-    dataBytes?: number;
+    dataLength?: number;
     data?: Uint8Array;
   };
 
@@ -406,7 +414,7 @@ function prettyChunk(chunk: Chunk): Chunk & {
     } catch {
       pretty.dataText = "<binary data>";
     }
-    pretty.dataBytes = chunk.data.length;
+    pretty.dataLength = chunk.data.length;
     delete pretty.data;
   }
 
@@ -427,27 +435,9 @@ type MessageToClient =
 // import { Transform, Duplex } from "stream";
 
 export type PluginContext = {
-  // Send data to the telnet server
   sendToServer(data: Uint8Array): void;
-
-  // Send text to the websocket client
   sendToClient(message: MessageToClient): void;
-
-  // Get/set connection options
-  // options: Record<string, any>;
-
-  // Pipeline management
-  pipeline: PipelineManager;
-  // pipeline: {
-  //   // Add a transform to the pipeline, returns removal function
-  //   add(transform: Transform): () => void;
-
-  //   // Check if a transform is in the pipeline
-  //   has(transform: Transform): boolean;
-
-  //   // Get current pipeline state (for debugging)
-  //   inspect(): string[];
-  // };
+  addMiddleware: (transform: Transform) => () => void;
 };
 
 export type ClientMessageResult =
@@ -460,7 +450,7 @@ export type ServerChunkHandlerResult =
   | { type: "handled" }
   | { type: "continue" };
 
-export type PluginReturn = {
+export type Plugin = {
   name: string;
 
   // Called for each chunk from server
@@ -475,5 +465,6 @@ export type PluginReturn = {
   onClose?(): void;
 };
 
-export type PluginFactory<T = void> = (config: T) => Plugin;
-export type Plugin = (ctx: PluginContext) => PluginReturn;
+export type PluginFactory<T = void> = (
+  config: T,
+) => (ctx: PluginContext) => Plugin;

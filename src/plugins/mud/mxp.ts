@@ -1,12 +1,3 @@
-// case Cmd.MXP: {
-//   if (chunk.name === "DO") {
-//     console.log("Client->Server IAC WONT MXP");
-//     telnet.write(Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.MXP]));
-//     return;
-//   }
-//   break;
-// }
-
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 

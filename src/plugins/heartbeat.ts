@@ -1,4 +1,4 @@
-import { PluginFactory, PluginReturn } from "../index.js";
+import { PluginFactory } from "../index.js";
 
 // Send data to server to avoid idle timeout
 const heartbeat: PluginFactory<{
@@ -21,7 +21,7 @@ const heartbeat: PluginFactory<{
       timeout = setTimeout(sendHeartbeat, interval);
     }
 
-    const ret: PluginReturn = {
+    return {
       name: "heartbeat",
       onClientMessage: () => {
         console.log("Heartbeat plugin onClientMessage");
@@ -34,7 +34,6 @@ const heartbeat: PluginFactory<{
         clearTimeout(timeout);
       },
     };
-    return ret;
   };
 
 export default heartbeat;
