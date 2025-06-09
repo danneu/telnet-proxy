@@ -31,8 +31,12 @@ Use query params when connecting to the server:
 
 - `host`: string (required)
 - `port`: number (optional, default: 23)
-- `encoding`: `"auto"` | `"utf8"` | `"latin1"` | `"big5"` | `"gbk"`(optional, default: auto)
-  - If you know the remote server encoding in advance, you can specify the encoding. Otherwise, the proxy will detect utf8 vs latin1 for you.
-  - For `big5` and `gbk`, you must specify them.
-- `mccp2`: string boolean (optional, default: false)
-  - Whether to use MCCP2 compression.
+- `format`: `"raw"` | `"json"` (optional)
+  - `raw` (default): websocket message is raw chunks of server data
+  - `json`: sends structured data:
+    - `{ type: "data", data: string }`: raw data from server
+    - `{ type: "error", message: string }`: proxy or client errors
+    - `{ type: "mud:mssp", data: Record<string, string> }`: parsed [mssp](https://tintin.mudhalla.net/protocols/mssp/) data from server
+- `encoding`: `"auto"` | `"utf8"` | `"latin1"` | `"big5"` | `"gbk"`(optional)
+  - `auto` (default): server detects `utf8` vs `latin1` for you
+  - `big5`, `gbk`: you must specify these in advance

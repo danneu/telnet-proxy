@@ -27,7 +27,6 @@ const ConnectionOptionsSchema = z.object({
   host: z.string(),
   port: z.coerce.number().optional().default(23),
   format: z.enum(["raw", "json"]).optional().default("raw"),
-  mccp2: z.preprocess((val) => val !== "false", z.boolean().optional()),
   encoding: z
     .enum(["auto", "latin1", "utf8", "gbk", "big5"])
     .optional()
