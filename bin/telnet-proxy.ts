@@ -5,8 +5,8 @@ import "dotenv/config";
 
 const ConfigSchema = z.object({
   PORT: z.coerce.number().default(8888),
-  HEARTBEAT_INTERVAL: z.coerce.number().default(5000),
-  TELNET_TIMEOUT: z.coerce.number().default(30000),
+  HEARTBEAT_INTERVAL: z.coerce.number().optional().default(5000),
+  TELNET_TIMEOUT: z.coerce.number().optional(),
 });
 
 const env = ConfigSchema.parse(process.env);
@@ -18,27 +18,27 @@ const config: ServerConfig = {
   plugins: [
     // telnet negotiations
 
-    plugin.windowSize({ width: 100, height: 24 }),
-    plugin.newEnviron({ reply: "reject" }),
-    plugin.echo({ reply: "reject" }),
-    plugin.charset({ reply: "reject" }),
-    plugin.terminalSpeed({ reply: "reject" }),
+    plugin.windowSize({ negotiate: "accept", width: 100, height: 24 }),
+    plugin.newEnviron({ negotiate: "reject" }),
+    plugin.echo({ negotiate: "reject" }),
+    plugin.charset({ negotiate: "reject" }),
+    plugin.terminalSpeed({ negotiate: "reject" }),
 
     // extra plugins (not telnet negotiation)
 
-    plugin.heartbeat({ interval: env.HEARTBEAT_INTERVAL }),
+    plugin.heartbeat(),
 
     // mud plugins
 
-    plugin.mud.mssp({ reply: "accept" }),
-    plugin.mud.mccp2({ reply: "accept" }),
+    plugin.mud.mssp({ negotiate: "accept" }),
+    plugin.mud.mccp2({ negotiate: "accept" }),
 
-    plugin.mud.mxp({ reply: "reject" }),
-    plugin.mud.atcp({ reply: "reject" }),
-    plugin.mud.gmcp({ reply: "reject" }),
-    plugin.mud.msp({ reply: "reject" }),
+    plugin.mud.mxp({ negotiate: "reject" }),
+    plugin.mud.atcp({ negotiate: "reject" }),
+    plugin.mud.gmcp({ negotiate: "reject" }),
+    plugin.mud.msp({ negotiate: "reject" }),
     plugin.mud.msdp({
-      reply: "reject",
+      negotiate: "reject",
       onVariable: (name, value) => {
         console.log(`MSDP variable ${name} received:`, value);
       },
@@ -46,8 +46,7 @@ const config: ServerConfig = {
   ],
 };
 
-const server = createServer(config);
-server
+createServer(config)
   .listen()
   .then(() => {
     console.log(`Listening on port ${config.port}...`);

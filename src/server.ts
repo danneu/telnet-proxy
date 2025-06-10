@@ -1,21 +1,22 @@
 // index.ts
 import * as ws from "ws";
 import * as net from "net";
-import { Parser, type Chunk, Cmd, Dmc } from "./parser.js";
+import { Parser, type Chunk, Cmd, Dmc, getCmdName } from "./parser.js";
 import { IncomingMessage } from "http";
-import { decodeText } from "./utils/decode-text.js";
+import { decodeText } from "./decode-text.js";
 import { z } from "zod";
 import iconv from "iconv-lite";
 import { createHttpServer } from "./http-server.js";
 import { createPipelineManager } from "./pipeline-manager.js";
 import { Transform } from "stream";
+import { autonegotiate } from "./util.js";
 
 // Server sends DO → You respond WILL or WONT
 // Server sends WILL → You respond DO or DONT
 
 export type ServerConfig = {
   port: number;
-  telnetTimeout: number;
+  telnetTimeout?: number;
   parserBufferSize?: number;
   plugins: ((ctx: PluginContext) => Plugin)[];
   // control is negotiation and commands like AYT, GA, etc. since other data is noisy
@@ -108,7 +109,7 @@ function createConnectionHandler(config: ServerConfig) {
       websocket.close();
     });
 
-    telnet.setTimeout(config.telnetTimeout);
+    telnet.setTimeout(config.telnetTimeout ?? 30_000);
     telnet.on("timeout", () => {
       telnet.destroy();
       sendToClient({
@@ -234,31 +235,23 @@ function createConnectionHandler(config: ServerConfig) {
               console.log(`⚠️ Unhandled CMD code: ${chunk.code}`);
           }
           break;
-        case "NEGOTIATION":
+        case "NEGOTIATION": {
           // Auto-reject any unhandled negotiations
-
-          // For DO requests we don't handle
-          if (chunk.name === "DO") {
+          if (
+            chunk.name === "DO" ||
+            chunk.name === "WILL" ||
+            chunk.name === "DONT" ||
+            chunk.name === "WONT"
+          ) {
+            const reply = autonegotiate(chunk.name, "reject");
             console.log(
-              `⚠️ [Auto-reject] Client->Server IAC WONT ${chunk.target}`,
+              `⚠️ [Auto-reject] Client->Server IAC ${getCmdName(reply)} ${chunk.target}`,
             );
-            telnet.write(Uint8Array.from([Cmd.IAC, Cmd.WONT, chunk.target]));
-            return;
-          }
-          // For WILL requests we don't handle
-          else if (chunk.name === "WILL") {
-            console.log(
-              `⚠️ [Auto-reject] Client->Server IAC DONT ${chunk.target}`,
-            );
-            telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, chunk.target]));
-            return;
-          } else if (chunk.name === "DONT" || chunk.name === "WONT") {
-            // We just confirm with server by responding DONT back to DONT | WONT
-            console.log(`[Auto-reply] Client->Server IAC DONT ${chunk.target}`);
-            telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DONT, chunk.target]));
+            telnet.write(Uint8Array.from([Cmd.IAC, reply, chunk.target]));
             return;
           }
           break;
+        }
         default: {
           const exhaustive: never = chunk;
           throw new Error(`Invalid chunk type: ${exhaustive}`);

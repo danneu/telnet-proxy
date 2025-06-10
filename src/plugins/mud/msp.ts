@@ -7,8 +7,8 @@
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 
-const msp: PluginFactory<{ reply: "accept" | "reject" }> =
-  ({ reply }) =>
+const msp: PluginFactory<{ negotiate: "accept" | "reject" }> =
+  ({ negotiate }) =>
   (ctx) => {
     return {
       name: "msp",
@@ -18,7 +18,7 @@ const msp: PluginFactory<{ reply: "accept" | "reject" }> =
           chunk.name === "WILL" &&
           chunk.target === Cmd.MSP
         ) {
-          if (reply === "accept") {
+          if (negotiate === "accept") {
             console.log("[msp]: Client->Server IAC DO MSP");
             ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSP]));
           } else {

@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { decodeText } from "../src/utils/decode-text.js";
+import { decodeText } from "../src/decode-text.js";
 
 describe("decodeText", () => {
   test("decodes valid UTF-8 text with auto charset", () => {

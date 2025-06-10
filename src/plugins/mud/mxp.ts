@@ -1,8 +1,8 @@
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 
-const mxp: PluginFactory<{ reply: "accept" | "reject" }> =
-  ({ reply }) =>
+const mxp: PluginFactory<{ negotiate: "accept" | "reject" }> =
+  ({ negotiate }) =>
   (ctx) => {
     return {
       name: "mxp",
@@ -13,7 +13,7 @@ const mxp: PluginFactory<{ reply: "accept" | "reject" }> =
           chunk.name === "WILL" &&
           chunk.target === Cmd.MXP
         ) {
-          if (reply === "accept") {
+          if (negotiate === "accept") {
             console.log("[mxp]: Client->Server IAC DO MXP");
             ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MXP]));
           } else {
@@ -26,7 +26,7 @@ const mxp: PluginFactory<{ reply: "accept" | "reject" }> =
           chunk.name === "DO" &&
           chunk.target === Cmd.MXP
         ) {
-          if (reply === "accept") {
+          if (negotiate === "accept") {
             console.log("[mxp]: Client->Server IAC WILL MXP");
             ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.WILL, Cmd.MXP]));
           } else {

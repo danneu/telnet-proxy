@@ -7,8 +7,8 @@ import { Cmd } from "../parser.js";
 //
 // - thresholdrpg.com:3333 sends DO CHARSET
 // Only supports reject for now.
-const charset: PluginFactory<{ reply: "reject" }> =
-  ({ reply: _reply }) =>
+const charset: PluginFactory<{ negotiate: "reject" }> =
+  ({ negotiate: _negotiate }) =>
   (ctx) => {
     return {
       name: "charset",

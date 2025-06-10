@@ -3,8 +3,8 @@
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 
-const atcp: PluginFactory<{ reply: "accept" | "reject" }> =
-  ({ reply }) =>
+const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
+  ({ negotiate }) =>
   (ctx) => {
     return {
       name: "atcp",
@@ -14,7 +14,7 @@ const atcp: PluginFactory<{ reply: "accept" | "reject" }> =
           chunk.name === "WILL" &&
           chunk.target === Cmd.ATCP
         ) {
-          if (reply === "accept") {
+          if (negotiate === "accept") {
             console.log("[atcp]: Client->Server IAC DO ATCP");
             ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.ATCP]));
           } else {
@@ -28,7 +28,7 @@ const atcp: PluginFactory<{ reply: "accept" | "reject" }> =
           chunk.target === Cmd.ATCP
         ) {
           // aarchonmud.com:7000 sends DO ATCP
-          if (reply === "accept") {
+          if (negotiate === "accept") {
             console.log("[atcp]: Client->Server IAC WILL ATCP");
             ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.WILL, Cmd.ATCP]));
           } else {

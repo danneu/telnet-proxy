@@ -41,6 +41,34 @@ Use query params when connecting to the server:
   - `auto` (default): server detects `utf8` vs `latin1` for you
   - `big5`, `gbk`: you must specify these in advance
 
+## Use as Library
+
+```typescript
+import { createServer, plugin, ServerConfig } from "telnet-proxy";
+
+const config: ServerConfig = {
+  port: 8888,
+  logIncomingData: "none", // no logging
+  plugins: [
+    // Basic telnet options
+    plugin.windowSize({ width: 100, height: 24 }),
+    plugin.echo({ reply: "reject" }), // server shouldn't echo back our messages
+
+    // Periodically send empty data to keep connection alive
+    plugin.heartbeat(),
+
+    // MUD protocols
+    plugin.mud.mccp2({ reply: "accept" }),
+    plugin.mud.gmcp({ reply: "reject" }),
+    plugin.mud.mssp({ reply: "accept" }),
+  ],
+};
+
+const server = createServer(config);
+await server.listen();
+console.log(`Listening on port ${config.port}...`);
+```
+
 ## Plugin System
 
 The proxy uses a plugin system to handle telnet protocol negotiations and transformations. Plugins can intercept and modify data flowing between the client and server.
@@ -67,11 +95,15 @@ const echo: PluginFactory<{ enabled: boolean }> = (config) => (ctx) => {
     name: "echo",
     onServerChunk: (chunk) => {
       // Handle server echo negotiation
-      if (chunk.type === "NEGOTIATION" && 
-          chunk.name === "WILL" && 
-          chunk.target === Cmd.ECHO) {
+      if (
+        chunk.type === "NEGOTIATION" &&
+        chunk.name === "WILL" &&
+        chunk.target === Cmd.ECHO
+      ) {
         const response = config.enabled ? Cmd.DO : Cmd.DONT;
-        console.log(`[echo]: ${config.enabled ? 'Accepting' : 'Rejecting'} server echo`);
+        console.log(
+          `[echo]: ${config.enabled ? "Accepting" : "Rejecting"} server echo`,
+        );
         ctx.sendToServer(Uint8Array.from([Cmd.IAC, response, Cmd.ECHO]));
         return { type: "handled" };
       }
@@ -82,30 +114,3 @@ const echo: PluginFactory<{ enabled: boolean }> = (config) => (ctx) => {
 ```
 
 Built-in plugins handle common telnet options like window size, compression (MCCP2), and MUD protocols (GMCP, MSSP).
-
-## Use as Library
-
-```typescript
-import { createServer, plugin, ServerConfig } from 'telnet-proxy';
-
-const config: ServerConfig = {
-  port: 8888,
-  telnetTimeout: 30000,
-  logIncomingData: "control",
-  plugins: [
-    // Basic telnet options
-    plugin.windowSize({ width: 100, height: 24 }),
-    plugin.echo({ reply: "reject" }),
-    plugin.heartbeat({ interval: 5000 }),
-    
-    // MUD protocols
-    plugin.mud.mccp2({ reply: "accept" }),
-    plugin.mud.gmcp({ reply: "reject" }),
-    plugin.mud.mssp({ reply: "accept" }),
-  ],
-};
-
-const server = createServer(config);
-await server.listen();
-console.log(`Listening on port ${config.port}...`);
-```

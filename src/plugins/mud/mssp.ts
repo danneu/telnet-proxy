@@ -20,8 +20,8 @@
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 
-const mssp: PluginFactory<{ reply: "accept" | "reject" }> =
-  ({ reply }) =>
+const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
+  ({ negotiate }) =>
   (ctx) => {
     return {
       name: "mssp",
@@ -31,7 +31,7 @@ const mssp: PluginFactory<{ reply: "accept" | "reject" }> =
           chunk.name === "WILL" &&
           chunk.target === Cmd.MSSP
         ) {
-          if (reply === "accept") {
+          if (negotiate === "accept") {
             console.log("[mssp]: Client->Server IAC DO MSSP");
             ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSSP]));
           } else {

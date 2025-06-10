@@ -24,10 +24,10 @@ import { Transform } from "stream";
         })
 */
 
-export { Cmd, Dmc, Parser };
+export { Dmc, Parser };
 export type { Chunk };
 
-const Cmd = {
+export const Cmd = {
   IAC: 255,
   // Negotiation
   WILL: 251,
@@ -68,7 +68,10 @@ const Cmd = {
   ATCP: 200,
   GMCP: 201,
   EOR: 239, // https://tintin.mudhalla.net/protocols/eor/
-};
+} as const;
+
+// eslint-disable-next-line no-redeclare
+export type Cmd = typeof Cmd;
 
 // Look up friendly code name from a code number
 const Dmc = (() => {
@@ -78,6 +81,10 @@ const Dmc = (() => {
   }
   return inverted;
 })();
+
+export function getCmdName(code: (typeof Cmd)[keyof typeof Cmd]): string {
+  return Dmc[code];
+}
 
 type Chunk =
   // Non-command data

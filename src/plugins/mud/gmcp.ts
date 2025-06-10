@@ -3,8 +3,8 @@
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 
-const gmcp: PluginFactory<{ reply: "accept" | "reject" }> =
-  ({ reply }) =>
+const gmcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
+  ({ negotiate }) =>
   (ctx) => {
     return {
       name: "gmcp",
@@ -14,7 +14,7 @@ const gmcp: PluginFactory<{ reply: "accept" | "reject" }> =
           chunk.name === "WILL" &&
           chunk.target === Cmd.GMCP
         ) {
-          if (reply === "accept") {
+          if (negotiate === "accept") {
             console.log("[gmcp]: Client->Server IAC DO GMCP");
             ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.GMCP]));
           } else {

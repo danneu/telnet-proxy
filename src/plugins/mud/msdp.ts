@@ -17,7 +17,7 @@ type MSDPTable = { [key: string]: MSDPValue };
 interface MSDPArray extends Array<MSDPValue> {} // Get around circular dep error
 
 interface MSDPConfig {
-  reply: "accept" | "reject";
+  negotiate: "accept" | "reject";
   // Callback when MSDP variables are received
   onVariable?: (name: string, value: MSDPValue) => void;
   // Variables to report automatically
@@ -29,7 +29,7 @@ interface MSDPConfig {
 
 const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
   const {
-    reply,
+    negotiate,
     onVariable,
     autoReport = [],
     clientName = "github.com/danneu/solid-mud-client",
@@ -131,7 +131,7 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
         chunk.name === "WILL" &&
         chunk.target === Cmd.MSDP
       ) {
-        if (reply === "accept") {
+        if (negotiate === "accept") {
           console.log("[MSDP] Server offers MSDP, accepting");
           ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSDP]));
           onMSDPEnabled();

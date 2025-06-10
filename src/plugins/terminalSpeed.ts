@@ -1,8 +1,8 @@
 import { PluginFactory } from "../index.js";
 import { Cmd } from "../parser.js";
 
-const terminalSpeed: PluginFactory<{ reply: "reject" }> =
-  ({ reply: _reply }) =>
+const terminalSpeed: PluginFactory<{ negotiate: "reject" }> =
+  ({ negotiate: _negotiate }) =>
   (ctx) => {
     return {
       name: "terminalSpeed",

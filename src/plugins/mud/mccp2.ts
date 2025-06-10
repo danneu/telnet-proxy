@@ -4,8 +4,8 @@ import * as zlib from "zlib";
 
 const PLUGIN_NAME = "mccp2";
 
-const mccp2: PluginFactory<{ reply: "accept" | "reject" }> =
-  ({ reply }) =>
+const mccp2: PluginFactory<{ negotiate: "accept" | "reject" }> =
+  ({ negotiate }) =>
   (ctx) => {
     let removeMiddleware: (() => void) | null = null;
 
@@ -16,7 +16,7 @@ const mccp2: PluginFactory<{ reply: "accept" | "reject" }> =
         chunk.name === "WILL" &&
         chunk.target === Cmd.MCCP2
       ) {
-        if (reply === "accept") {
+        if (negotiate === "accept") {
           console.log(`[${PLUGIN_NAME}]: Accepting compression`);
           ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
         } else {

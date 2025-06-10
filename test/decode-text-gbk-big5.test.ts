@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import { deepStrictEqual } from "node:assert";
-import { decodeText } from "../src/utils/decode-text.js";
+import { decodeText } from "../src/decode-text.js";
 import iconv from "iconv-lite";
 
 test("decodeText handles GBK encoding", () => {

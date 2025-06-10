@@ -1,8 +1,8 @@
 import { PluginFactory } from "../index.js";
 import { Cmd } from "../parser.js";
 
-const newEnviron: PluginFactory<{ reply: "reject" }> =
-  ({ reply: _reply }) =>
+const newEnviron: PluginFactory<{ negotiate: "reject" }> =
+  ({ negotiate: _negotiate }) =>
   (ctx) => {
     return {
       name: "newEnviron",
