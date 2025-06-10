@@ -1,11 +1,9 @@
 import { Cmd } from "./parser.js";
 
-export type NegotiationVerb = "DO" | "DONT" | "WILL" | "WONT";
-
 export function autonegotiate(
-  incoming: NegotiationVerb,
+  incoming: "DO" | "DONT" | "WILL" | "WONT",
   reply: "accept" | "reject",
-): (typeof Cmd)[keyof typeof Cmd] {
+): Cmd["DO"] | Cmd["DONT"] | Cmd["WILL"] | Cmd["WONT"] {
   switch (incoming) {
     case "DO": // Server tells us to do something
       return reply === "accept"

@@ -5,8 +5,8 @@ import { Parser, Cmd, type Chunk } from "../src/parser.js";
 // Type predicate to check if chunk is a subnegotiation
 function isSBChunk(
   chunk: Chunk | null,
-): chunk is Extract<Chunk, { name: "SB" }> {
-  return chunk?.type === "NEGOTIATION" && chunk.name === "SB";
+): chunk is Extract<Chunk, { type: "SUBNEGOTIATION" }> {
+  return chunk?.type === "SUBNEGOTIATION";
 }
 
 describe("Parser subnegotiation handling", () => {

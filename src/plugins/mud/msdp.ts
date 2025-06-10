@@ -143,11 +143,7 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
       }
 
       // Handle MSDP subnegotiation
-      if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.name === "SB" &&
-        chunk.target === Cmd.MSDP
-      ) {
+      if (chunk.type === "SUBNEGOTIATION" && chunk.target === Cmd.MSDP) {
         // Parse MSDP data from the subnegotiation
         const parsed = parseMSDPData(chunk.data);
         if (parsed) {

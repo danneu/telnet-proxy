@@ -24,8 +24,7 @@ import { Transform } from "stream";
         })
 */
 
-export { Dmc, Parser };
-export type { Chunk };
+export type CmdName = keyof typeof Cmd;
 
 export const Cmd = {
   IAC: 255,
@@ -73,20 +72,40 @@ export const Cmd = {
 // eslint-disable-next-line no-redeclare
 export type Cmd = typeof Cmd;
 
+export function isCmdCode(code: number): code is Cmd[keyof Cmd] {
+  return code in Cmd;
+}
+
 // Look up friendly code name from a code number
-const Dmc = (() => {
-  const inverted: { [key: number]: string } = {};
+export const Dmc: DmcType = (() => {
+  const inverted = {} as DmcType;
   for (const [k, v] of Object.entries(Cmd)) {
-    inverted[v] = k;
+    inverted[v as Cmd[keyof Cmd]] = k as Extract<keyof Cmd, string>;
   }
   return inverted;
 })();
 
-export function getCmdName(code: (typeof Cmd)[keyof typeof Cmd]): string {
+type DmcType = {
+  [K in Cmd[keyof Cmd]]: Extract<keyof Cmd, string>;
+};
+// eslint-disable-next-line no-redeclare
+export type Dmc = DmcType;
+
+export function getCmdName(code: Cmd[keyof Cmd]): string {
   return Dmc[code];
 }
 
-type Chunk =
+export const Verb = {
+  WILL: Cmd.WILL,
+  WONT: Cmd.WONT,
+  DO: Cmd.DO,
+  DONT: Cmd.DONT,
+} as const;
+
+// eslint-disable-next-line no-redeclare
+export type Verb = (typeof Verb)[keyof typeof Verb];
+
+export type Chunk =
   // Non-command data
   | { type: "DATA"; data: Uint8Array }
   // Negotiation
@@ -94,7 +113,8 @@ type Chunk =
   | { type: "NEGOTIATION"; name: "WONT"; target: number }
   | { type: "NEGOTIATION"; name: "DO"; target: number }
   | { type: "NEGOTIATION"; name: "DONT"; target: number }
-  | { type: "NEGOTIATION"; name: "SB"; target: number; data: Uint8Array }
+  // Subnegotiation (data message resulting from negotiation)
+  | { type: "SUBNEGOTIATION"; target: number; data: Uint8Array }
   // Other commands like IAC AYT, IAC GA, etc.
   | { type: "CMD"; code: number };
 
@@ -118,7 +138,7 @@ export type ParserStream = Transform & {
   drain: () => Uint8Array;
 };
 
-class Parser {
+export class Parser {
   buf: number[] = [];
   maxBufferSize: number;
 
@@ -247,8 +267,7 @@ class Parser {
           if (this.buf[i + 1] === Cmd.SE) {
             // Found terminator - return complete subnegotiation
             const chunk: Chunk = {
-              type: "NEGOTIATION",
-              name: "SB",
+              type: "SUBNEGOTIATION",
               target: this.buf[2],
               data: Uint8Array.from(data),
             };

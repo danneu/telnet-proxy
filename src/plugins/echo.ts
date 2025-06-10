@@ -8,11 +8,8 @@ const echo: PluginFactory<{ negotiate: "accept" | "reject" }> =
     return {
       name: "echo",
       onServerChunk: (chunk) => {
-        if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.name === "WILL" &&
-          chunk.target === Cmd.ECHO
-        ) {
+        if (chunk.type === "NEGOTIATION" && chunk.target === Cmd.ECHO) {
+          // Trying out simpler way to automatically negotiate
           const reply = autonegotiate(chunk.name, negotiate);
           console.log(`[echo]: Client->Server IAC ${getCmdName(reply)} ECHO`);
           ctx.sendToServer(Uint8Array.from([Cmd.IAC, reply, Cmd.ECHO]));

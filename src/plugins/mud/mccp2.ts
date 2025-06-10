@@ -26,8 +26,7 @@ const mccp2: PluginFactory<{ negotiate: "accept" | "reject" }> =
         return { type: "handled" };
       } else if (
         // Handle compression start
-        chunk.type === "NEGOTIATION" &&
-        chunk.name === "SB" &&
+        chunk.type === "SUBNEGOTIATION" &&
         chunk.target === Cmd.MCCP2
       ) {
         console.log(`[${PLUGIN_NAME}]: Compression starting`);

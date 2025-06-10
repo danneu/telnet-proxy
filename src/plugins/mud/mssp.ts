@@ -40,8 +40,7 @@ const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
           }
           return { type: "handled" };
         } else if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.name === "SB" &&
+          chunk.type === "SUBNEGOTIATION" &&
           chunk.target === Cmd.MSSP
         ) {
           const data = decode(chunk.data);

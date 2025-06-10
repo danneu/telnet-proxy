@@ -1,7 +1,7 @@
 // index.ts
 import * as ws from "ws";
 import * as net from "net";
-import { Parser, type Chunk, Cmd, Dmc, getCmdName } from "./parser.js";
+import { Parser, type Chunk, Cmd, getCmdName, isCmdCode } from "./parser.js";
 import { IncomingMessage } from "http";
 import { decodeText } from "./decode-text.js";
 import { z } from "zod";
@@ -237,19 +237,15 @@ function createConnectionHandler(config: ServerConfig) {
           break;
         case "NEGOTIATION": {
           // Auto-reject any unhandled negotiations
-          if (
-            chunk.name === "DO" ||
-            chunk.name === "WILL" ||
-            chunk.name === "DONT" ||
-            chunk.name === "WONT"
-          ) {
-            const reply = autonegotiate(chunk.name, "reject");
-            console.log(
-              `⚠️ [Auto-reject] Client->Server IAC ${getCmdName(reply)} ${chunk.target}`,
-            );
-            telnet.write(Uint8Array.from([Cmd.IAC, reply, chunk.target]));
-            return;
-          }
+          const reply = autonegotiate(chunk.name, "reject");
+          console.log(
+            `⚠️ [Auto-reject] Client->Server IAC ${getCmdName(reply)} ${chunk.target}`,
+          );
+          telnet.write(Uint8Array.from([Cmd.IAC, reply, chunk.target]));
+          return;
+        }
+        case "SUBNEGOTIATION": {
+          // Ignore unhandled subneg data
           break;
         }
         default: {
@@ -414,10 +410,14 @@ function prettyChunk(chunk: Chunk): Chunk & {
 
   // Add friendly names
   if ("target" in chunk) {
-    pretty.targetName = Dmc[chunk.target] || `unknown(${chunk.target})`;
+    pretty.targetName = isCmdCode(chunk.target)
+      ? getCmdName(chunk.target)
+      : `unknown(${chunk.target})`;
   }
   if ("code" in chunk) {
-    pretty.codeName = Dmc[chunk.code] || `unknown(${chunk.code})`;
+    pretty.codeName = isCmdCode(chunk.code)
+      ? getCmdName(chunk.code)
+      : `unknown(${chunk.code})`;
   }
 
   // Handle data
