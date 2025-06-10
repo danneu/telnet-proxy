@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { PluginFactory } from "../index.js";
-import { Cmd } from "../parser.js";
+import { TELNET } from "../parser.js";
 
 const ConfigSchema = z.discriminatedUnion("negotiate", [
   z.object({
@@ -22,15 +22,15 @@ const windowSize: PluginFactory<Config> = (_config) => (ctx) => {
     name: "windowSize",
     onServerChunk: (chunk) => {
       if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.verb === Cmd.DO &&
-        chunk.target === Cmd.WINDOW_SIZE
+        chunk.type === "negotiation" &&
+        chunk.verb === TELNET.DO &&
+        chunk.target === TELNET.WINDOW_SIZE
       ) {
         if (config.negotiate === "accept") {
           const { width, height } = config;
           console.log("[windowSize]: Client->Server IAC WILL WINDOW_SIZE");
           ctx.sendToServer(
-            Uint8Array.from([Cmd.IAC, Cmd.WILL, Cmd.WINDOW_SIZE]),
+            Uint8Array.from([TELNET.IAC, TELNET.WILL, TELNET.WINDOW_SIZE]),
           );
           console.log(
             "[windowSize]: Client->Server IAC SB WINDOW_SIZE ... IAC SE",
@@ -38,16 +38,16 @@ const windowSize: PluginFactory<Config> = (_config) => (ctx) => {
           ctx.sendToServer(
             // prettier-ignore
             Uint8Array.from([
-            Cmd.IAC, Cmd.SB, Cmd.WINDOW_SIZE,
+            TELNET.IAC, TELNET.SB, TELNET.WINDOW_SIZE,
             width >> 8, width & 0xff, // width as 16-bit big-endian
             height >> 8, height & 0xff, // height as 16-bit big-endian
-            Cmd.IAC, Cmd.SE,
+            TELNET.IAC, TELNET.SE,
           ]),
           );
         } else {
           console.log("[windowSize]: Client->Server IAC WONT WINDOW_SIZE");
           ctx.sendToServer(
-            Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.WINDOW_SIZE]),
+            Uint8Array.from([TELNET.IAC, TELNET.WONT, TELNET.WINDOW_SIZE]),
           );
         }
 

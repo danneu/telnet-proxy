@@ -5,7 +5,7 @@
 // For testing, thresholdrpg.com:3333 uses MSP.
 
 import { PluginFactory } from "../../index.js";
-import { Cmd } from "../../parser.js";
+import { TELNET } from "../../parser.js";
 
 const msp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>
@@ -14,16 +14,20 @@ const msp: PluginFactory<{ negotiate: "accept" | "reject" }> =
       name: "msp",
       onServerChunk: (chunk) => {
         if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.WILL &&
-          chunk.target === Cmd.MSP
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.WILL &&
+          chunk.target === TELNET.MSP
         ) {
           if (negotiate === "accept") {
             console.log("[msp]: Client->Server IAC DO MSP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DO, TELNET.MSP]),
+            );
           } else {
             console.log("[msp]: Client->Server IAC DONT MSP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MSP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DONT, TELNET.MSP]),
+            );
           }
           return { type: "handled" };
         }

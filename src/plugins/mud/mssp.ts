@@ -18,7 +18,7 @@
 // }
 
 import { PluginFactory } from "../../index.js";
-import { Cmd } from "../../parser.js";
+import { TELNET } from "../../parser.js";
 
 const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>
@@ -27,21 +27,25 @@ const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
       name: "mssp",
       onServerChunk: (chunk) => {
         if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.WILL &&
-          chunk.target === Cmd.MSSP
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.WILL &&
+          chunk.target === TELNET.MSSP
         ) {
           if (negotiate === "accept") {
             console.log("[mssp]: Client->Server IAC DO MSSP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSSP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DO, TELNET.MSSP]),
+            );
           } else {
             console.log("[mssp]: Client->Server IAC DONT MSSP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MSSP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DONT, TELNET.MSSP]),
+            );
           }
           return { type: "handled" };
         } else if (
-          chunk.type === "SUBNEGOTIATION" &&
-          chunk.target === Cmd.MSSP
+          chunk.type === "subnegotiation" &&
+          chunk.target === TELNET.MSSP
         ) {
           const data = decode(chunk.data);
           console.log("[mssp] MSSP data:", data);

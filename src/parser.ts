@@ -24,9 +24,10 @@ import { Transform } from "stream";
         })
 */
 
-export type CmdName = keyof typeof Cmd;
+export type TelnetCodeName = keyof typeof TELNET;
+export type TelnetCode = (typeof TELNET)[TelnetCodeName];
 
-export const Cmd = {
+export const TELNET = {
   IAC: 255,
   // Negotiation
   WILL: 251,
@@ -70,45 +71,42 @@ export const Cmd = {
 } as const;
 
 // eslint-disable-next-line no-redeclare
-export type Cmd = typeof Cmd;
+export type TELNET = typeof TELNET;
 
-export function isCmdCode(code: number): code is Cmd[keyof Cmd] {
-  return code in Dmc;
+export function isTelnetCode(code: number): code is TelnetCode {
+  return code in codeToName;
 }
 
 // Look up friendly code name from a code number
-export const Dmc: DmcType = (() => {
-  const inverted = {} as DmcType;
-  for (const [k, v] of Object.entries(Cmd)) {
-    inverted[v as Cmd[keyof Cmd]] = k as Extract<keyof Cmd, string>;
+const codeToName: TelnetNameLookup = (() => {
+  const inverted = Object.create(null) as TelnetNameLookup;
+  for (const [k, v] of Object.entries(TELNET)) {
+    inverted[v as TelnetCode] = k as Extract<TelnetCodeName, string>;
   }
   return inverted;
 })();
 
-type DmcType = {
-  [K in Cmd[keyof Cmd]]: Extract<keyof Cmd, string>;
+type TelnetNameLookup = {
+  [K in TelnetCode]: Extract<TelnetCodeName, string>;
 };
-// eslint-disable-next-line no-redeclare
-export type Dmc = DmcType;
 
-export function getCmdName(code: Cmd[keyof Cmd]): string {
-  return Dmc[code];
+export function getTelnetCodeName(code: TelnetCode): TelnetCodeName {
+  return codeToName[code];
 }
 
-// export type CmdVerb = Cmd["WILL"] | Cmd["WONT"] | Cmd["DO"] | Cmd["DONT"];
-
 export type Chunk =
-  // Non-command data
-  | { type: "DATA"; data: Uint8Array }
-  // Negotiation
-  | { type: "NEGOTIATION"; verb: Cmd["WILL"]; target: number }
-  | { type: "NEGOTIATION"; verb: Cmd["WONT"]; target: number }
-  | { type: "NEGOTIATION"; verb: Cmd["DO"]; target: number }
-  | { type: "NEGOTIATION"; verb: Cmd["DONT"]; target: number }
+  // Viewable text data
+  | { type: "text"; data: Uint8Array }
+  // Negotiation (IAC DO <option>, IAC DONT <option>, IAC WILL <option>, IAC WONT <option>)
+  | {
+      type: "negotiation";
+      verb: TELNET["WILL"] | TELNET["WONT"] | TELNET["DO"] | TELNET["DONT"];
+      target: number;
+    }
   // Subnegotiation (data message resulting from negotiation)
-  | { type: "SUBNEGOTIATION"; target: number; data: Uint8Array }
+  | { type: "subnegotiation"; target: number; data: Uint8Array }
   // Other commands like IAC AYT, IAC GA, etc.
-  | { type: "CMD"; code: number };
+  | { type: "command"; code: number };
 
 // match(this.buf, [Cmd.IAC, Cmd.DO, 'number'])
 // 'number' matches a single number slot
@@ -192,7 +190,7 @@ export class Parser {
 
     // Detect data chunk (consume data bytes from start until IAC)
     while (i < this.buf.length) {
-      if (this.buf[i] === Cmd.IAC) {
+      if (this.buf[i] === TELNET.IAC) {
         break;
       }
       data.push(this.buf[i]);
@@ -201,44 +199,44 @@ export class Parser {
 
     if (data.length > 0) {
       this.buf.splice(0, data.length);
-      return { type: "DATA", data: Uint8Array.from(data) };
+      return { type: "text", data: Uint8Array.from(data) };
     }
 
     // Decode IAC chunk
     data = [];
-    if (match(this.buf, [Cmd.IAC, Cmd.DO, "number"])) {
+    if (match(this.buf, [TELNET.IAC, TELNET.DO, "number"])) {
       const chunk: Chunk = {
-        type: "NEGOTIATION",
-        verb: Cmd.DO,
+        type: "negotiation",
+        verb: TELNET.DO,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);
       return chunk;
-    } else if (match(this.buf, [Cmd.IAC, Cmd.DONT, "number"])) {
+    } else if (match(this.buf, [TELNET.IAC, TELNET.DONT, "number"])) {
       const chunk: Chunk = {
-        type: "NEGOTIATION",
-        verb: Cmd.DONT,
+        type: "negotiation",
+        verb: TELNET.DONT,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);
       return chunk;
-    } else if (match(this.buf, [Cmd.IAC, Cmd.WILL, "number"])) {
+    } else if (match(this.buf, [TELNET.IAC, TELNET.WILL, "number"])) {
       const chunk: Chunk = {
-        type: "NEGOTIATION",
-        verb: Cmd.WILL,
+        type: "negotiation",
+        verb: TELNET.WILL,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);
       return chunk;
-    } else if (match(this.buf, [Cmd.IAC, Cmd.WONT, "number"])) {
+    } else if (match(this.buf, [TELNET.IAC, TELNET.WONT, "number"])) {
       const chunk: Chunk = {
-        type: "NEGOTIATION",
-        verb: Cmd.WONT,
+        type: "negotiation",
+        verb: TELNET.WONT,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);
       return chunk;
-    } else if (match(this.buf, [Cmd.IAC, Cmd.SB, "number"])) {
+    } else if (match(this.buf, [TELNET.IAC, TELNET.SB, "number"])) {
       // Subnegotiation parsing: IAC SB <option> <data...> IAC SE
       //
       // Within subnegotiation data, IAC bytes must be escaped as IAC IAC.
@@ -255,19 +253,19 @@ export class Parser {
       let data = [];
       while (i < this.buf.length - 1) {
         // Ensure we can check i+1
-        if (this.buf[i] === Cmd.IAC) {
-          if (this.buf[i + 1] === Cmd.SE) {
+        if (this.buf[i] === TELNET.IAC) {
+          if (this.buf[i + 1] === TELNET.SE) {
             // Found terminator - return complete subnegotiation
             const chunk: Chunk = {
-              type: "SUBNEGOTIATION",
+              type: "subnegotiation",
               target: this.buf[2],
               data: Uint8Array.from(data),
             };
             this.buf.splice(0, i + 2); // Remove through IAC SE
             return chunk;
-          } else if (this.buf[i + 1] === Cmd.IAC) {
+          } else if (this.buf[i + 1] === TELNET.IAC) {
             // Escaped IAC - add single IAC to data
-            data.push(Cmd.IAC);
+            data.push(TELNET.IAC);
             i += 2; // Skip both IAC bytes
             continue;
           }
@@ -279,8 +277,8 @@ export class Parser {
       }
       // Incomplete sequence - wait for more data
       return null;
-    } else if (match(this.buf, [Cmd.IAC, "number"])) {
-      const chunk: Chunk = { type: "CMD", code: this.buf[1] };
+    } else if (match(this.buf, [TELNET.IAC, "number"])) {
+      const chunk: Chunk = { type: "command", code: this.buf[1] };
       this.buf.splice(0, 2);
       return chunk;
     } else {

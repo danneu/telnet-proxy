@@ -1,12 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { Parser, Cmd, type Chunk } from "../src/parser.js";
+import { Parser, TELNET, type Chunk } from "../src/parser.js";
 
 // Type predicate to check if chunk is a subnegotiation
 function isSBChunk(
   chunk: Chunk | null,
-): chunk is Extract<Chunk, { type: "SUBNEGOTIATION" }> {
-  return chunk?.type === "SUBNEGOTIATION";
+): chunk is Extract<Chunk, { type: "subnegotiation" }> {
+  return chunk?.type === "subnegotiation";
 }
 
 describe("Parser subnegotiation handling", () => {
@@ -15,12 +15,21 @@ describe("Parser subnegotiation handling", () => {
 
     // IAC SB MCCP2 <data: 1 2 3> IAC SE
     parser.push(
-      new Uint8Array([Cmd.IAC, Cmd.SB, Cmd.MCCP2, 1, 2, 3, Cmd.IAC, Cmd.SE]),
+      new Uint8Array([
+        TELNET.IAC,
+        TELNET.SB,
+        TELNET.MCCP2,
+        1,
+        2,
+        3,
+        TELNET.IAC,
+        TELNET.SE,
+      ]),
     );
 
     const chunk = parser.next();
     assert(isSBChunk(chunk), "Expected SB chunk");
-    assert.equal(chunk.target, Cmd.MCCP2);
+    assert.equal(chunk.target, TELNET.MCCP2);
     assert.deepEqual(chunk.data, new Uint8Array([1, 2, 3]));
   });
 
@@ -31,17 +40,17 @@ describe("Parser subnegotiation handling", () => {
     // Wire format needs IAC IAC for the 255 byte
     parser.push(
       new Uint8Array([
-        Cmd.IAC,
-        Cmd.SB,
+        TELNET.IAC,
+        TELNET.SB,
         86,
         1,
         2,
-        Cmd.IAC,
-        Cmd.IAC,
+        TELNET.IAC,
+        TELNET.IAC,
         3,
         4,
-        Cmd.IAC,
-        Cmd.SE,
+        TELNET.IAC,
+        TELNET.SE,
       ]),
     );
 
@@ -57,18 +66,18 @@ describe("Parser subnegotiation handling", () => {
     // Data should be: [255, 255, 100, 255]
     parser.push(
       new Uint8Array([
-        Cmd.IAC,
-        Cmd.SB,
+        TELNET.IAC,
+        TELNET.SB,
         50,
-        Cmd.IAC,
-        Cmd.IAC, // First 255
-        Cmd.IAC,
-        Cmd.IAC, // Second 255
+        TELNET.IAC,
+        TELNET.IAC, // First 255
+        TELNET.IAC,
+        TELNET.IAC, // Second 255
         100, // Regular byte
-        Cmd.IAC,
-        Cmd.IAC, // Third 255
-        Cmd.IAC,
-        Cmd.SE,
+        TELNET.IAC,
+        TELNET.IAC, // Third 255
+        TELNET.IAC,
+        TELNET.SE,
       ]),
     );
 
@@ -81,13 +90,13 @@ describe("Parser subnegotiation handling", () => {
     const parser = new Parser();
 
     // Missing IAC SE terminator
-    parser.push(new Uint8Array([Cmd.IAC, Cmd.SB, Cmd.MCCP2, 1, 2, 3]));
+    parser.push(new Uint8Array([TELNET.IAC, TELNET.SB, TELNET.MCCP2, 1, 2, 3]));
 
     const chunk = parser.next();
     assert.equal(chunk, null);
 
     // Now add the terminator
-    parser.push(new Uint8Array([Cmd.IAC, Cmd.SE]));
+    parser.push(new Uint8Array([TELNET.IAC, TELNET.SE]));
 
     const completeChunk = parser.next();
     assert(isSBChunk(completeChunk), "Expected SB chunk");
@@ -98,13 +107,13 @@ describe("Parser subnegotiation handling", () => {
     const parser = new Parser();
 
     // First part ends with IAC
-    parser.push(new Uint8Array([Cmd.IAC, Cmd.SB, 100, 1, 2, Cmd.IAC]));
+    parser.push(new Uint8Array([TELNET.IAC, TELNET.SB, 100, 1, 2, TELNET.IAC]));
 
     let chunk = parser.next();
     assert.equal(chunk, null); // Incomplete - could be IAC IAC or IAC SE
 
     // Add second IAC (making it escaped IAC) and more data
-    parser.push(new Uint8Array([Cmd.IAC, 3, 4, Cmd.IAC, Cmd.SE]));
+    parser.push(new Uint8Array([TELNET.IAC, 3, 4, TELNET.IAC, TELNET.SE]));
 
     chunk = parser.next();
     assert(isSBChunk(chunk), "Expected SB chunk");
@@ -115,11 +124,19 @@ describe("Parser subnegotiation handling", () => {
     const parser = new Parser();
 
     // IAC SB ECHO IAC SE (no data)
-    parser.push(new Uint8Array([Cmd.IAC, Cmd.SB, Cmd.ECHO, Cmd.IAC, Cmd.SE]));
+    parser.push(
+      new Uint8Array([
+        TELNET.IAC,
+        TELNET.SB,
+        TELNET.ECHO,
+        TELNET.IAC,
+        TELNET.SE,
+      ]),
+    );
 
     const chunk = parser.next();
     assert(isSBChunk(chunk), "Expected SB chunk");
-    assert.equal(chunk.target, Cmd.ECHO);
+    assert.equal(chunk.target, TELNET.ECHO);
     assert.deepEqual(chunk.data, new Uint8Array([]));
   });
 
@@ -129,14 +146,14 @@ describe("Parser subnegotiation handling", () => {
     // Incomplete SB followed by a complete WILL command
     parser.push(
       new Uint8Array([
-        Cmd.IAC,
-        Cmd.SB,
+        TELNET.IAC,
+        TELNET.SB,
         100,
         1,
         2, // Incomplete SB
-        Cmd.IAC,
-        Cmd.WILL,
-        Cmd.ECHO, // Complete WILL
+        TELNET.IAC,
+        TELNET.WILL,
+        TELNET.ECHO, // Complete WILL
       ]),
     );
 
@@ -148,7 +165,7 @@ describe("Parser subnegotiation handling", () => {
     assert.equal(parser.buf.length, 8);
 
     // Now complete the SB
-    parser.buf.splice(5, 0, Cmd.IAC, Cmd.SE); // Insert IAC SE after position 5
+    parser.buf.splice(5, 0, TELNET.IAC, TELNET.SE); // Insert IAC SE after position 5
 
     // Should now parse the SB
     chunk = parser.next();
@@ -157,8 +174,8 @@ describe("Parser subnegotiation handling", () => {
 
     // And then parse the WILL
     chunk = parser.next();
-    assert.equal(chunk?.type, "NEGOTIATION");
-    assert.equal(chunk?.verb, Cmd.WILL);
-    assert.equal(chunk?.target, Cmd.ECHO);
+    assert.equal(chunk?.type, "negotiation");
+    assert.equal(chunk?.verb, TELNET.WILL);
+    assert.equal(chunk?.target, TELNET.ECHO);
   });
 });

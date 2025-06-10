@@ -1,7 +1,7 @@
 // https://www.ironrealms.com/rapture/manual/files/FeatATCP-txt.html
 
 import { PluginFactory } from "../../index.js";
-import { Cmd } from "../../parser.js";
+import { TELNET } from "../../parser.js";
 
 const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>
@@ -10,30 +10,38 @@ const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
       name: "atcp",
       onServerChunk: (chunk) => {
         if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.WILL &&
-          chunk.target === Cmd.ATCP
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.WILL &&
+          chunk.target === TELNET.ATCP
         ) {
           if (negotiate === "accept") {
             console.log("[atcp]: Client->Server IAC DO ATCP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.ATCP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DO, TELNET.ATCP]),
+            );
           } else {
             console.log("[atcp]: Client->Server IAC DONT ATCP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.ATCP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DONT, TELNET.ATCP]),
+            );
           }
           return { type: "handled" };
         } else if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.DO &&
-          chunk.target === Cmd.ATCP
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.DO &&
+          chunk.target === TELNET.ATCP
         ) {
           // aarchonmud.com:7000 sends DO ATCP
           if (negotiate === "accept") {
             console.log("[atcp]: Client->Server IAC WILL ATCP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.WILL, Cmd.ATCP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.WILL, TELNET.ATCP]),
+            );
           } else {
             console.log("[atcp]: Client->Server IAC WONT ATCP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.ATCP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.WONT, TELNET.ATCP]),
+            );
           }
           return { type: "handled" };
         }

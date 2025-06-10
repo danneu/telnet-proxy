@@ -1,5 +1,5 @@
 import { PluginFactory } from "../index.js";
-import { Cmd } from "../parser.js";
+import { TELNET } from "../parser.js";
 
 const terminalSpeed: PluginFactory<{ negotiate: "reject" }> =
   ({ negotiate: _negotiate }) =>
@@ -8,15 +8,15 @@ const terminalSpeed: PluginFactory<{ negotiate: "reject" }> =
       name: "terminalSpeed",
       onServerChunk: (chunk) => {
         if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.DO &&
-          chunk.target === Cmd.TERMINAL_SPEED
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.DO &&
+          chunk.target === TELNET.TERMINAL_SPEED
         ) {
           console.log(
             "[terminalSpeed]: Client->Server IAC WONT TERMINAL_SPEED",
           );
           ctx.sendToServer(
-            Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.TERMINAL_SPEED]),
+            Uint8Array.from([TELNET.IAC, TELNET.WONT, TELNET.TERMINAL_SPEED]),
           );
           return { type: "handled" };
         }

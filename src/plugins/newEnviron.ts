@@ -1,5 +1,5 @@
 import { PluginFactory } from "../index.js";
-import { Cmd } from "../parser.js";
+import { TELNET } from "../parser.js";
 
 const newEnviron: PluginFactory<{ negotiate: "reject" }> =
   ({ negotiate: _negotiate }) =>
@@ -8,13 +8,13 @@ const newEnviron: PluginFactory<{ negotiate: "reject" }> =
       name: "newEnviron",
       onServerChunk: (chunk) => {
         if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.DO &&
-          chunk.target === Cmd.NEW_ENVIRON
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.DO &&
+          chunk.target === TELNET.NEW_ENVIRON
         ) {
           console.log("[newEnviron]: Client->Server IAC WONT NEW_ENVIRON");
           ctx.sendToServer(
-            Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.NEW_ENVIRON]),
+            Uint8Array.from([TELNET.IAC, TELNET.WONT, TELNET.NEW_ENVIRON]),
           );
           return { type: "handled" };
         }

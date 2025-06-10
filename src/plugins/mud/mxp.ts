@@ -1,5 +1,5 @@
 import { PluginFactory } from "../../index.js";
-import { Cmd } from "../../parser.js";
+import { TELNET } from "../../parser.js";
 
 const mxp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>
@@ -9,29 +9,37 @@ const mxp: PluginFactory<{ negotiate: "accept" | "reject" }> =
       onServerChunk: (chunk) => {
         if (
           // aarchonmud.com:7000 sends WILL MXP
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.WILL &&
-          chunk.target === Cmd.MXP
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.WILL &&
+          chunk.target === TELNET.MXP
         ) {
           if (negotiate === "accept") {
             console.log("[mxp]: Client->Server IAC DO MXP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MXP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DO, TELNET.MXP]),
+            );
           } else {
             console.log("[mxp]: Client->Server IAC DONT MXP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MXP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.DONT, TELNET.MXP]),
+            );
           }
           return { type: "handled" };
         } else if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.DO &&
-          chunk.target === Cmd.MXP
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.DO &&
+          chunk.target === TELNET.MXP
         ) {
           if (negotiate === "accept") {
             console.log("[mxp]: Client->Server IAC WILL MXP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.WILL, Cmd.MXP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.WILL, TELNET.MXP]),
+            );
           } else {
             console.log("[mxp]: Client->Server IAC WONT MXP");
-            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.MXP]));
+            ctx.sendToServer(
+              Uint8Array.from([TELNET.IAC, TELNET.WONT, TELNET.MXP]),
+            );
           }
           return { type: "handled" };
         }

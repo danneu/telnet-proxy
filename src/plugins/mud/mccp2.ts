@@ -1,5 +1,5 @@
 import { PluginFactory, ServerChunkHandlerResult } from "../../index.js";
-import { Chunk, Cmd } from "../../parser.js";
+import { Chunk, TELNET } from "../../parser.js";
 import * as zlib from "zlib";
 
 const PLUGIN_NAME = "mccp2";
@@ -12,22 +12,26 @@ const mccp2: PluginFactory<{ negotiate: "accept" | "reject" }> =
     const onServerChunk = (chunk: Chunk): ServerChunkHandlerResult => {
       // Handle WILL MCCP2
       if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.verb === Cmd.WILL &&
-        chunk.target === Cmd.MCCP2
+        chunk.type === "negotiation" &&
+        chunk.verb === TELNET.WILL &&
+        chunk.target === TELNET.MCCP2
       ) {
         if (negotiate === "accept") {
           console.log(`[${PLUGIN_NAME}]: Accepting compression`);
-          ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
+          ctx.sendToServer(
+            new Uint8Array([TELNET.IAC, TELNET.DO, TELNET.MCCP2]),
+          );
         } else {
           console.log(`[${PLUGIN_NAME}]: Rejecting compression`);
-          ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DONT, Cmd.MCCP2]));
+          ctx.sendToServer(
+            new Uint8Array([TELNET.IAC, TELNET.DONT, TELNET.MCCP2]),
+          );
         }
         return { type: "handled" };
       } else if (
         // Handle compression start
-        chunk.type === "SUBNEGOTIATION" &&
-        chunk.target === Cmd.MCCP2
+        chunk.type === "subnegotiation" &&
+        chunk.target === TELNET.MCCP2
       ) {
         console.log(`[${PLUGIN_NAME}]: Compression starting`);
         const decompressor = zlib.createInflate({

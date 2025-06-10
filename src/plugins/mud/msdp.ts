@@ -1,5 +1,5 @@
 import { PluginFactory } from "../../index.js";
-import { Cmd } from "../../parser.js";
+import { TELNET } from "../../parser.js";
 
 // FIXME: Untested, unused
 
@@ -40,7 +40,7 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
 
   // Helper to send MSDP commands
   const sendMSDPCommand = (varName: string, value: string | string[]) => {
-    const bytes: number[] = [Cmd.IAC, Cmd.SB, Cmd.MSDP, MSDP_VAR];
+    const bytes: number[] = [TELNET.IAC, TELNET.SB, TELNET.MSDP, MSDP_VAR];
 
     // Add variable name
     for (const char of varName) {
@@ -64,7 +64,7 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
       }
     }
 
-    bytes.push(Cmd.IAC, Cmd.SE);
+    bytes.push(TELNET.IAC, TELNET.SE);
     ctx.sendToServer(Uint8Array.from(bytes));
   };
 
@@ -127,23 +127,27 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
     onServerChunk: (chunk) => {
       // Handle WILL MSDP negotiation
       if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.verb === Cmd.WILL &&
-        chunk.target === Cmd.MSDP
+        chunk.type === "negotiation" &&
+        chunk.verb === TELNET.WILL &&
+        chunk.target === TELNET.MSDP
       ) {
         if (negotiate === "accept") {
           console.log("[MSDP] Server offers MSDP, accepting");
-          ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSDP]));
+          ctx.sendToServer(
+            Uint8Array.from([TELNET.IAC, TELNET.DO, TELNET.MSDP]),
+          );
           onMSDPEnabled();
         } else {
           console.log("[MSDP] Server offers MSDP, refusing");
-          ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MSDP]));
+          ctx.sendToServer(
+            Uint8Array.from([TELNET.IAC, TELNET.DONT, TELNET.MSDP]),
+          );
         }
         return { type: "handled" };
       }
 
       // Handle MSDP subnegotiation
-      if (chunk.type === "SUBNEGOTIATION" && chunk.target === Cmd.MSDP) {
+      if (chunk.type === "subnegotiation" && chunk.target === TELNET.MSDP) {
         // Parse MSDP data from the subnegotiation
         const parsed = parseMSDPData(chunk.data);
         if (parsed) {
@@ -297,7 +301,7 @@ function parseMSDPValue(
     data[i] !== MSDP_VAL &&
     data[i] !== MSDP_TABLE_CLOSE &&
     data[i] !== MSDP_ARRAY_CLOSE &&
-    data[i] !== Cmd.IAC
+    data[i] !== TELNET.IAC
   ) {
     value += String.fromCharCode(data[i]);
     i++;

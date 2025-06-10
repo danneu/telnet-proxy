@@ -1,5 +1,5 @@
 import { PluginFactory } from "../index.js";
-import { Cmd } from "../parser.js";
+import { TELNET } from "../parser.js";
 
 // TODO: Handle CHARSET negotiation
 // Example server message if we DO:
@@ -14,22 +14,26 @@ const charset: PluginFactory<{ negotiate: "reject" }> =
       name: "charset",
       onServerChunk: (chunk) => {
         if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.WILL &&
-          chunk.target === Cmd.CHARSET
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.WILL &&
+          chunk.target === TELNET.CHARSET
         ) {
           console.log("[charset]: Client->Server IAC DONT CHARSET");
-          ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.CHARSET]));
+          ctx.sendToServer(
+            Uint8Array.from([TELNET.IAC, TELNET.DONT, TELNET.CHARSET]),
+          );
           return { type: "handled" };
         }
         // Also handle DO CHARSET
         if (
-          chunk.type === "NEGOTIATION" &&
-          chunk.verb === Cmd.DO &&
-          chunk.target === Cmd.CHARSET
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.DO &&
+          chunk.target === TELNET.CHARSET
         ) {
           console.log("[charset]: Client->Server IAC WONT CHARSET");
-          ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.WONT, Cmd.CHARSET]));
+          ctx.sendToServer(
+            Uint8Array.from([TELNET.IAC, TELNET.WONT, TELNET.CHARSET]),
+          );
           return { type: "handled" };
         }
         return { type: "continue" };

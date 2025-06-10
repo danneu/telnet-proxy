@@ -1,7 +1,13 @@
 // index.ts
 import * as ws from "ws";
 import * as net from "net";
-import { Parser, type Chunk, Cmd, getCmdName, isCmdCode } from "./parser.js";
+import {
+  Parser,
+  type Chunk,
+  TELNET,
+  getTelnetCodeName,
+  isTelnetCode,
+} from "./parser.js";
 import { IncomingMessage } from "http";
 import { decodeText } from "./decode-text.js";
 import { z } from "zod";
@@ -170,7 +176,7 @@ function createConnectionHandler(config: ServerConfig) {
           break;
         case "control":
           // log non-DATA chunks
-          if (chunk.type !== "DATA") {
+          if (chunk.type !== "text") {
             console.log("recv chunk", prettyChunk(chunk));
           }
           break;
@@ -209,7 +215,7 @@ function createConnectionHandler(config: ServerConfig) {
       }
 
       switch (chunk.type) {
-        case "DATA": {
+        case "text": {
           const { text, charset } = decodeText(chunk.data, options.encoding);
           if (charset === "latin1") {
             options.encoding = "latin1";
@@ -220,31 +226,31 @@ function createConnectionHandler(config: ServerConfig) {
           });
           return;
         }
-        case "CMD":
+        case "command":
           switch (chunk.code) {
-            case Cmd.ARE_YOU_THERE:
+            case TELNET.ARE_YOU_THERE:
               console.log(
                 `Client->Server (Responding to AYT): "Present\\r\\n"`,
               );
               telnet.write("Present\r\n");
               break;
-            case Cmd.GO_AHEAD:
+            case TELNET.GO_AHEAD:
               // GA marks end of prompt; nothing to do
               return;
             default:
               console.log(`⚠️ Unhandled CMD code: ${chunk.code}`);
           }
           break;
-        case "NEGOTIATION": {
+        case "negotiation": {
           // Auto-reject any unhandled negotiations
           const reply = autonegotiate(chunk.verb, "reject");
           console.log(
-            `⚠️ [Auto-reject] Client->Server IAC ${getCmdName(reply)} ${chunk.target}`,
+            `⚠️ [Auto-reject] Client->Server IAC ${getTelnetCodeName(reply)} ${chunk.target}`,
           );
-          telnet.write(Uint8Array.from([Cmd.IAC, reply, chunk.target]));
+          telnet.write(Uint8Array.from([TELNET.IAC, reply, chunk.target]));
           return;
         }
-        case "SUBNEGOTIATION": {
+        case "subnegotiation": {
           // Ignore unhandled subneg data
           break;
         }
@@ -371,8 +377,8 @@ function escapeIAC(data: Uint8Array): Uint8Array {
   for (let i = 0; i < data.length; i++) {
     const byte = data[i];
     escaped[writeIndex++] = byte;
-    if (byte === Cmd.IAC) {
-      escaped[writeIndex++] = Cmd.IAC;
+    if (byte === TELNET.IAC) {
+      escaped[writeIndex++] = TELNET.IAC;
       foundIAC = true;
     }
   }
@@ -410,13 +416,13 @@ function prettyChunk(chunk: Chunk): Chunk & {
 
   // Add friendly names
   if ("target" in chunk) {
-    pretty.targetName = isCmdCode(chunk.target)
-      ? getCmdName(chunk.target)
+    pretty.targetName = isTelnetCode(chunk.target)
+      ? getTelnetCodeName(chunk.target)
       : `unknown(${chunk.target})`;
   }
   if ("code" in chunk) {
-    pretty.codeName = isCmdCode(chunk.code)
-      ? getCmdName(chunk.code)
+    pretty.codeName = isTelnetCode(chunk.code)
+      ? getTelnetCodeName(chunk.code)
       : `unknown(${chunk.code})`;
   }
 
