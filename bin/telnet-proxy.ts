@@ -14,6 +14,7 @@ import gmcp from "../src/plugins/mud/gmcp.js";
 import charset from "../src/plugins/charset.js";
 import msp from "../src/plugins/mud/msp.js";
 import msdp from "../src/plugins/mud/msdp.js";
+import atcp from "../src/plugins/mud/atcp.js";
 
 const ConfigSchema = z.object({
   PORT: z.coerce.number().default(8888),
@@ -48,12 +49,13 @@ const server = createServer({
     heartbeat({ interval: config.HEARTBEAT_INTERVAL }),
     // mud plugins
     mxp(false),
+    atcp(false),
     gmcp(false),
     mssp(),
     mccp2(true),
     msp(false),
     msdp({
-      enabled: true,
+      enabled: false,
       onVariable: (name, value) => {
         console.log(`MSDP variable ${name} received:`, value);
       },
