@@ -13,7 +13,7 @@ const mccp2: PluginFactory<{ negotiate: "accept" | "reject" }> =
       // Handle WILL MCCP2
       if (
         chunk.type === "NEGOTIATION" &&
-        chunk.name === "WILL" &&
+        chunk.verb === Cmd.WILL &&
         chunk.target === Cmd.MCCP2
       ) {
         if (negotiate === "accept") {

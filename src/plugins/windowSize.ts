@@ -23,7 +23,7 @@ const windowSize: PluginFactory<Config> = (_config) => (ctx) => {
     onServerChunk: (chunk) => {
       if (
         chunk.type === "NEGOTIATION" &&
-        chunk.name === "DO" &&
+        chunk.verb === Cmd.DO &&
         chunk.target === Cmd.WINDOW_SIZE
       ) {
         if (config.negotiate === "accept") {

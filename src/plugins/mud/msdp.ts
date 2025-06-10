@@ -128,7 +128,7 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
       // Handle WILL MSDP negotiation
       if (
         chunk.type === "NEGOTIATION" &&
-        chunk.name === "WILL" &&
+        chunk.verb === Cmd.WILL &&
         chunk.target === Cmd.MSDP
       ) {
         if (negotiate === "accept") {

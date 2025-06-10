@@ -10,7 +10,7 @@ const mxp: PluginFactory<{ negotiate: "accept" | "reject" }> =
         if (
           // aarchonmud.com:7000 sends WILL MXP
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "WILL" &&
+          chunk.verb === Cmd.WILL &&
           chunk.target === Cmd.MXP
         ) {
           if (negotiate === "accept") {
@@ -23,7 +23,7 @@ const mxp: PluginFactory<{ negotiate: "accept" | "reject" }> =
           return { type: "handled" };
         } else if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "DO" &&
+          chunk.verb === Cmd.DO &&
           chunk.target === Cmd.MXP
         ) {
           if (negotiate === "accept") {

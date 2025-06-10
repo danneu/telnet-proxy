@@ -11,7 +11,7 @@ const gmcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
       onServerChunk: (chunk) => {
         if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "WILL" &&
+          chunk.verb === Cmd.WILL &&
           chunk.target === Cmd.GMCP
         ) {
           if (negotiate === "accept") {

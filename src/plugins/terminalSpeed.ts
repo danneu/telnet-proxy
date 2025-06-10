@@ -9,7 +9,7 @@ const terminalSpeed: PluginFactory<{ negotiate: "reject" }> =
       onServerChunk: (chunk) => {
         if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "DO" &&
+          chunk.verb === Cmd.DO &&
           chunk.target === Cmd.TERMINAL_SPEED
         ) {
           console.log(

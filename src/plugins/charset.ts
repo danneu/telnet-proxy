@@ -15,7 +15,7 @@ const charset: PluginFactory<{ negotiate: "reject" }> =
       onServerChunk: (chunk) => {
         if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "WILL" &&
+          chunk.verb === Cmd.WILL &&
           chunk.target === Cmd.CHARSET
         ) {
           console.log("[charset]: Client->Server IAC DONT CHARSET");
@@ -25,7 +25,7 @@ const charset: PluginFactory<{ negotiate: "reject" }> =
         // Also handle DO CHARSET
         if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "DO" &&
+          chunk.verb === Cmd.DO &&
           chunk.target === Cmd.CHARSET
         ) {
           console.log("[charset]: Client->Server IAC WONT CHARSET");

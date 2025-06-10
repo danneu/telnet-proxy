@@ -237,7 +237,7 @@ function createConnectionHandler(config: ServerConfig) {
           break;
         case "NEGOTIATION": {
           // Auto-reject any unhandled negotiations
-          const reply = autonegotiate(chunk.name, "reject");
+          const reply = autonegotiate(chunk.verb, "reject");
           console.log(
             `⚠️ [Auto-reject] Client->Server IAC ${getCmdName(reply)} ${chunk.target}`,
           );

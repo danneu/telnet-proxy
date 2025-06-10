@@ -73,7 +73,7 @@ export const Cmd = {
 export type Cmd = typeof Cmd;
 
 export function isCmdCode(code: number): code is Cmd[keyof Cmd] {
-  return code in Cmd;
+  return code in Dmc;
 }
 
 // Look up friendly code name from a code number
@@ -95,24 +95,16 @@ export function getCmdName(code: Cmd[keyof Cmd]): string {
   return Dmc[code];
 }
 
-export const Verb = {
-  WILL: Cmd.WILL,
-  WONT: Cmd.WONT,
-  DO: Cmd.DO,
-  DONT: Cmd.DONT,
-} as const;
-
-// eslint-disable-next-line no-redeclare
-export type Verb = (typeof Verb)[keyof typeof Verb];
+// export type CmdVerb = Cmd["WILL"] | Cmd["WONT"] | Cmd["DO"] | Cmd["DONT"];
 
 export type Chunk =
   // Non-command data
   | { type: "DATA"; data: Uint8Array }
   // Negotiation
-  | { type: "NEGOTIATION"; name: "WILL"; target: number }
-  | { type: "NEGOTIATION"; name: "WONT"; target: number }
-  | { type: "NEGOTIATION"; name: "DO"; target: number }
-  | { type: "NEGOTIATION"; name: "DONT"; target: number }
+  | { type: "NEGOTIATION"; verb: Cmd["WILL"]; target: number }
+  | { type: "NEGOTIATION"; verb: Cmd["WONT"]; target: number }
+  | { type: "NEGOTIATION"; verb: Cmd["DO"]; target: number }
+  | { type: "NEGOTIATION"; verb: Cmd["DONT"]; target: number }
   // Subnegotiation (data message resulting from negotiation)
   | { type: "SUBNEGOTIATION"; target: number; data: Uint8Array }
   // Other commands like IAC AYT, IAC GA, etc.
@@ -217,7 +209,7 @@ export class Parser {
     if (match(this.buf, [Cmd.IAC, Cmd.DO, "number"])) {
       const chunk: Chunk = {
         type: "NEGOTIATION",
-        name: "DO",
+        verb: Cmd.DO,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);
@@ -225,7 +217,7 @@ export class Parser {
     } else if (match(this.buf, [Cmd.IAC, Cmd.DONT, "number"])) {
       const chunk: Chunk = {
         type: "NEGOTIATION",
-        name: "DONT",
+        verb: Cmd.DONT,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);
@@ -233,7 +225,7 @@ export class Parser {
     } else if (match(this.buf, [Cmd.IAC, Cmd.WILL, "number"])) {
       const chunk: Chunk = {
         type: "NEGOTIATION",
-        name: "WILL",
+        verb: Cmd.WILL,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);
@@ -241,7 +233,7 @@ export class Parser {
     } else if (match(this.buf, [Cmd.IAC, Cmd.WONT, "number"])) {
       const chunk: Chunk = {
         type: "NEGOTIATION",
-        name: "WONT",
+        verb: Cmd.WONT,
         target: this.buf[2],
       };
       this.buf.splice(0, 3);

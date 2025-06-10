@@ -28,7 +28,7 @@ const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
       onServerChunk: (chunk) => {
         if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "WILL" &&
+          chunk.verb === Cmd.WILL &&
           chunk.target === Cmd.MSSP
         ) {
           if (negotiate === "accept") {

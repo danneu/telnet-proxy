@@ -158,7 +158,7 @@ describe("Parser subnegotiation handling", () => {
     // And then parse the WILL
     chunk = parser.next();
     assert.equal(chunk?.type, "NEGOTIATION");
-    assert.equal(chunk?.name, "WILL");
+    assert.equal(chunk?.verb, Cmd.WILL);
     assert.equal(chunk?.target, Cmd.ECHO);
   });
 });

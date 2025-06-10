@@ -11,7 +11,7 @@ const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
       onServerChunk: (chunk) => {
         if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "WILL" &&
+          chunk.verb === Cmd.WILL &&
           chunk.target === Cmd.ATCP
         ) {
           if (negotiate === "accept") {
@@ -24,7 +24,7 @@ const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
           return { type: "handled" };
         } else if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "DO" &&
+          chunk.verb === Cmd.DO &&
           chunk.target === Cmd.ATCP
         ) {
           // aarchonmud.com:7000 sends DO ATCP

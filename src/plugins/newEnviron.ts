@@ -9,7 +9,7 @@ const newEnviron: PluginFactory<{ negotiate: "reject" }> =
       onServerChunk: (chunk) => {
         if (
           chunk.type === "NEGOTIATION" &&
-          chunk.name === "DO" &&
+          chunk.verb === Cmd.DO &&
           chunk.target === Cmd.NEW_ENVIRON
         ) {
           console.log("[newEnviron]: Client->Server IAC WONT NEW_ENVIRON");
