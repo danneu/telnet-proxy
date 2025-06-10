@@ -1,6 +1,6 @@
 {
   "name": "telnet-proxy",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "A WebSocket-to-telnet proxy server for connecting web clients to MUD (Multi-User Dungeon) servers",
   "keywords": [
     "telnet",
