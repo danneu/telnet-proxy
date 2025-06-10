@@ -1,4 +1,4 @@
-# telnet-proxy
+# telnet-proxy [![NPM Version](https://img.shields.io/npm/v/telnet-proxy)](https://www.npmjs.com/package/telnet-proxy)
 
 A Telnet to WebSocket proxy server.
 
