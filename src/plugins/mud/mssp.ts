@@ -20,35 +20,42 @@
 import { PluginFactory } from "../../index.js";
 import { Cmd } from "../../parser.js";
 
-const mssp: PluginFactory<void> = () => (ctx) => {
-  return {
-    name: "mssp",
-    onServerChunk: (chunk) => {
-      if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.name === "WILL" &&
-        chunk.target === Cmd.MSSP
-      ) {
-        console.log("[mssp]: Client->Server IAC DO MSSP");
-        ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSSP]));
-        return { type: "handled" };
-      } else if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.name === "SB" &&
-        chunk.target === Cmd.MSSP
-      ) {
-        const data = decode(chunk.data);
-        console.log("[mssp] MSSP data:", data);
-        ctx.sendToClient({
-          type: "mud:mssp",
-          data,
-        });
-        return { type: "handled" };
-      }
-      return { type: "continue" };
-    },
+const mssp: PluginFactory<{ reply: "accept" | "reject" }> =
+  ({ reply }) =>
+  (ctx) => {
+    return {
+      name: "mssp",
+      onServerChunk: (chunk) => {
+        if (
+          chunk.type === "NEGOTIATION" &&
+          chunk.name === "WILL" &&
+          chunk.target === Cmd.MSSP
+        ) {
+          if (reply === "accept") {
+            console.log("[mssp]: Client->Server IAC DO MSSP");
+            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSSP]));
+          } else {
+            console.log("[mssp]: Client->Server IAC DONT MSSP");
+            ctx.sendToServer(Uint8Array.from([Cmd.IAC, Cmd.DONT, Cmd.MSSP]));
+          }
+          return { type: "handled" };
+        } else if (
+          chunk.type === "NEGOTIATION" &&
+          chunk.name === "SB" &&
+          chunk.target === Cmd.MSSP
+        ) {
+          const data = decode(chunk.data);
+          console.log("[mssp] MSSP data:", data);
+          ctx.sendToClient({
+            type: "mud:mssp",
+            data,
+          });
+          return { type: "handled" };
+        }
+        return { type: "continue" };
+      },
+    };
   };
-};
 
 export default mssp;
 

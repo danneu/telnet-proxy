@@ -3,8 +3,9 @@ import { PluginFactory } from "../index.js";
 // Send data to server to avoid idle timeout
 const heartbeat: PluginFactory<{
   interval: number;
+  message?: Uint8Array;
 }> =
-  ({ interval }) =>
+  ({ interval, message = new TextEncoder().encode(" \b") }) =>
   (ctx) => {
     let timeout = setTimeout(sendHeartbeat, interval);
 
@@ -17,7 +18,7 @@ const heartbeat: PluginFactory<{
 
       // :: This seems to work better for Cyberlife. but not sure it actually works to keep conn alive
       // console.log("[heartbeat] sending <space><backspace>");
-      ctx.sendToServer(Buffer.from(" \b"));
+      ctx.sendToServer(message);
       timeout = setTimeout(sendHeartbeat, interval);
     }
 

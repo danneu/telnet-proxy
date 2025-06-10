@@ -82,3 +82,30 @@ const echo: PluginFactory<{ enabled: boolean }> = (config) => (ctx) => {
 ```
 
 Built-in plugins handle common telnet options like window size, compression (MCCP2), and MUD protocols (GMCP, MSSP).
+
+## Use as Library
+
+```typescript
+import { createServer, plugin, ServerConfig } from 'telnet-proxy';
+
+const config: ServerConfig = {
+  port: 8888,
+  telnetTimeout: 30000,
+  logIncomingData: "control",
+  plugins: [
+    // Basic telnet options
+    plugin.windowSize({ width: 100, height: 24 }),
+    plugin.echo({ reply: "reject" }),
+    plugin.heartbeat({ interval: 5000 }),
+    
+    // MUD protocols
+    plugin.mud.mccp2({ reply: "accept" }),
+    plugin.mud.gmcp({ reply: "reject" }),
+    plugin.mud.mssp({ reply: "accept" }),
+  ],
+};
+
+const server = createServer(config);
+await server.listen();
+console.log(`Listening on port ${config.port}...`);
+```

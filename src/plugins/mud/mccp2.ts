@@ -4,65 +4,67 @@ import * as zlib from "zlib";
 
 const PLUGIN_NAME = "mccp2";
 
-const mccp2: PluginFactory<boolean> = (enabled) => (ctx) => {
-  let removeMiddleware: (() => void) | null = null;
+const mccp2: PluginFactory<{ reply: "accept" | "reject" }> =
+  ({ reply }) =>
+  (ctx) => {
+    let removeMiddleware: (() => void) | null = null;
 
-  const onServerChunk = (chunk: Chunk): ServerChunkHandlerResult => {
-    // Handle WILL MCCP2
-    if (
-      chunk.type === "NEGOTIATION" &&
-      chunk.name === "WILL" &&
-      chunk.target === Cmd.MCCP2
-    ) {
-      if (enabled) {
-        console.log(`[${PLUGIN_NAME}]: Accepting compression`);
-        ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
-      } else {
-        console.log(`[${PLUGIN_NAME}]: Rejecting compression`);
-        ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DONT, Cmd.MCCP2]));
-      }
-      return { type: "handled" };
-    } else if (
-      // Handle compression start
-      chunk.type === "NEGOTIATION" &&
-      chunk.name === "SB" &&
-      chunk.target === Cmd.MCCP2
-    ) {
-      console.log(`[${PLUGIN_NAME}]: Compression starting`);
-      const decompressor = zlib.createInflate({
-        finishFlush: zlib.constants.Z_SYNC_FLUSH,
-      });
-
-      decompressor.on("error", (err) => {
-        console.error(`[${PLUGIN_NAME}]: Decompression error:`, err);
-        ctx.sendToClient({
-          type: "error",
-          message: "MCCP2 Decompression error",
+    const onServerChunk = (chunk: Chunk): ServerChunkHandlerResult => {
+      // Handle WILL MCCP2
+      if (
+        chunk.type === "NEGOTIATION" &&
+        chunk.name === "WILL" &&
+        chunk.target === Cmd.MCCP2
+      ) {
+        if (reply === "accept") {
+          console.log(`[${PLUGIN_NAME}]: Accepting compression`);
+          ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DO, Cmd.MCCP2]));
+        } else {
+          console.log(`[${PLUGIN_NAME}]: Rejecting compression`);
+          ctx.sendToServer(new Uint8Array([Cmd.IAC, Cmd.DONT, Cmd.MCCP2]));
+        }
+        return { type: "handled" };
+      } else if (
+        // Handle compression start
+        chunk.type === "NEGOTIATION" &&
+        chunk.name === "SB" &&
+        chunk.target === Cmd.MCCP2
+      ) {
+        console.log(`[${PLUGIN_NAME}]: Compression starting`);
+        const decompressor = zlib.createInflate({
+          finishFlush: zlib.constants.Z_SYNC_FLUSH,
         });
-        removeMiddleware?.();
-      });
 
-      // This event happens when server sends Z_FINISH.
-      decompressor.on("end", () => {
-        console.log(`[${PLUGIN_NAME}]: Compression ended by server`);
-        removeMiddleware?.();
-      });
+        decompressor.on("error", (err) => {
+          console.error(`[${PLUGIN_NAME}]: Decompression error:`, err);
+          ctx.sendToClient({
+            type: "error",
+            message: "MCCP2 Decompression error",
+          });
+          removeMiddleware?.();
+        });
 
-      removeMiddleware = ctx.addMiddleware(decompressor);
+        // This event happens when server sends Z_FINISH.
+        decompressor.on("end", () => {
+          console.log(`[${PLUGIN_NAME}]: Compression ended by server`);
+          removeMiddleware?.();
+        });
 
-      console.log(
-        `[${PLUGIN_NAME}]: Enabled - server messages are now compressed`,
-      );
-      return { type: "handled" };
-    } else {
-      return { type: "continue" };
-    }
+        removeMiddleware = ctx.addMiddleware(decompressor);
+
+        console.log(
+          `[${PLUGIN_NAME}]: Enabled - server messages are now compressed`,
+        );
+        return { type: "handled" };
+      } else {
+        return { type: "continue" };
+      }
+    };
+
+    return {
+      name: PLUGIN_NAME,
+      onServerChunk,
+    };
   };
-
-  return {
-    name: PLUGIN_NAME,
-    onServerChunk,
-  };
-};
 
 export default mccp2;
