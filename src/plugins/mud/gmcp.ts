@@ -1,7 +1,7 @@
 // https://tintin.mudhalla.net/protocols/gmcp/
 
 import { PluginFactory } from "../../index.js";
-import { TELNET } from "../../parser.js";
+import { TELNET } from "../../telnet/index.js";
 
 const gmcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>

@@ -1,7 +1,7 @@
 // https://www.ironrealms.com/rapture/manual/files/FeatATCP-txt.html
 
 import { PluginFactory } from "../../index.js";
-import { TELNET } from "../../parser.js";
+import { TELNET } from "../../telnet/index.js";
 
 const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>

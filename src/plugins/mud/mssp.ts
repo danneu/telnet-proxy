@@ -1,24 +1,5 @@
-// case Cmd.MSSP: {
-//   if (chunk.name === "WILL") {
-//     console.log("Client->Server IAC DO MSSP");
-//     telnet.write(Uint8Array.from([Cmd.IAC, Cmd.DO, Cmd.MSSP]));
-//     return;
-//   }
-//   // Server responded to our DO MSSP negotiation with MSSP data
-//   if (chunk.name === "SB" && chunk.target === Cmd.MSSP) {
-//     const data = decodeMSSP(chunk.data);
-//     console.log("MSSP data:", data);
-//     sendToClient({
-//       type: "mud:mssp",
-//       data,
-//     });
-//     return;
-//   }
-//   break;
-// }
-
 import { PluginFactory } from "../../index.js";
-import { TELNET } from "../../parser.js";
+import { TELNET } from "../../telnet/index.js";
 
 const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>

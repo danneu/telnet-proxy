@@ -1,5 +1,5 @@
 import { PluginFactory } from "../index.js";
-import { TELNET, getTelnetCodeName } from "../parser.js";
+import { getTelnetCodeName, TELNET } from "../telnet/index.js";
 import { autonegotiate } from "../util.js";
 
 const echo: PluginFactory<{ negotiate: "accept" | "reject" }> =

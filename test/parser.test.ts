@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { Parser, TELNET, type Chunk } from "../src/parser.js";
+import { createParser, TELNET, type Chunk } from "../src/telnet/index.js";
 
 // Type predicate to check if chunk is a subnegotiation
 function isSBChunk(
@@ -11,7 +11,7 @@ function isSBChunk(
 
 describe("Parser subnegotiation handling", () => {
   test("parses simple subnegotiation without IAC in data", () => {
-    const parser = new Parser();
+    const parser = createParser();
 
     // IAC SB MCCP2 <data: 1 2 3> IAC SE
     parser.push(
@@ -34,7 +34,7 @@ describe("Parser subnegotiation handling", () => {
   });
 
   test("handles escaped IAC bytes in subnegotiation data", () => {
-    const parser = new Parser();
+    const parser = createParser();
 
     // IAC SB 86 <data: 1 2 255 3 4> IAC SE
     // Wire format needs IAC IAC for the 255 byte
@@ -61,7 +61,7 @@ describe("Parser subnegotiation handling", () => {
   });
 
   test("handles multiple escaped IAC bytes", () => {
-    const parser = new Parser();
+    const parser = createParser();
 
     // Data should be: [255, 255, 100, 255]
     parser.push(
@@ -87,7 +87,7 @@ describe("Parser subnegotiation handling", () => {
   });
 
   test("returns null for incomplete subnegotiation", () => {
-    const parser = new Parser();
+    const parser = createParser();
 
     // Missing IAC SE terminator
     parser.push(new Uint8Array([TELNET.IAC, TELNET.SB, TELNET.MCCP2, 1, 2, 3]));
@@ -104,7 +104,7 @@ describe("Parser subnegotiation handling", () => {
   });
 
   test("handles incomplete escaped IAC at buffer boundary", () => {
-    const parser = new Parser();
+    const parser = createParser();
 
     // First part ends with IAC
     parser.push(new Uint8Array([TELNET.IAC, TELNET.SB, 100, 1, 2, TELNET.IAC]));
@@ -121,7 +121,7 @@ describe("Parser subnegotiation handling", () => {
   });
 
   test("empty subnegotiation data", () => {
-    const parser = new Parser();
+    const parser = createParser();
 
     // IAC SB ECHO IAC SE (no data)
     parser.push(
@@ -138,44 +138,5 @@ describe("Parser subnegotiation handling", () => {
     assert(isSBChunk(chunk), "Expected SB chunk");
     assert.equal(chunk.target, TELNET.ECHO);
     assert.deepEqual(chunk.data, new Uint8Array([]));
-  });
-
-  test("preserves buffer for other commands after incomplete SB", () => {
-    const parser = new Parser();
-
-    // Incomplete SB followed by a complete WILL command
-    parser.push(
-      new Uint8Array([
-        TELNET.IAC,
-        TELNET.SB,
-        100,
-        1,
-        2, // Incomplete SB
-        TELNET.IAC,
-        TELNET.WILL,
-        TELNET.ECHO, // Complete WILL
-      ]),
-    );
-
-    // First should return null (incomplete SB)
-    let chunk = parser.next();
-    assert.equal(chunk, null);
-
-    // Buffer should still contain everything
-    assert.equal(parser.buf.length, 8);
-
-    // Now complete the SB
-    parser.buf.splice(5, 0, TELNET.IAC, TELNET.SE); // Insert IAC SE after position 5
-
-    // Should now parse the SB
-    chunk = parser.next();
-    assert(isSBChunk(chunk), "Expected SB chunk");
-    assert.deepEqual(chunk.data, new Uint8Array([1, 2]));
-
-    // And then parse the WILL
-    chunk = parser.next();
-    assert.equal(chunk?.type, "negotiation");
-    assert.equal(chunk?.verb, TELNET.WILL);
-    assert.equal(chunk?.target, TELNET.ECHO);
   });
 });

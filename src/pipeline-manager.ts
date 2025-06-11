@@ -1,6 +1,6 @@
 import { Duplex, Transform } from "stream";
-import { ParserStream } from "./parser.js";
 import { Plugin } from "./index.js";
+import { ParserStream } from "./telnet/index.js";
 
 // Pipeline Manager - Safely modify a stream pipeline while data is flowing
 //

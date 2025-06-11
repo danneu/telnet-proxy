@@ -5,7 +5,7 @@
 // For testing, thresholdrpg.com:3333 uses MSP.
 
 import { PluginFactory } from "../../index.js";
-import { TELNET } from "../../parser.js";
+import { TELNET } from "../../telnet/index.js";
 
 const msp: PluginFactory<{ negotiate: "accept" | "reject" }> =
   ({ negotiate }) =>

@@ -1,5 +1,5 @@
 import { PluginFactory, ServerChunkHandlerResult } from "../../index.js";
-import { Chunk, TELNET } from "../../parser.js";
+import { Chunk, TELNET } from "../../telnet/index.js";
 import * as zlib from "zlib";
 
 const PLUGIN_NAME = "mccp2";

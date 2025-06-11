@@ -2,12 +2,12 @@
 import * as ws from "ws";
 import * as net from "net";
 import {
-  Parser,
   type Chunk,
   TELNET,
   getTelnetCodeName,
   isTelnetCode,
-} from "./parser.js";
+  createParserStream,
+} from "./telnet/index.js";
 import { IncomingMessage } from "http";
 import { decodeText } from "./decode-text.js";
 import { z } from "zod";
@@ -19,6 +19,8 @@ import { autonegotiate } from "./util.js";
 
 // Server sends DO → You respond WILL or WONT
 // Server sends WILL → You respond DO or DONT
+// Server sends DONT -> You response WONT
+// Server sends WONT -> You response DONT
 
 export type ServerConfig = {
   port: number;
@@ -125,7 +127,9 @@ function createConnectionHandler(config: ServerConfig) {
       websocket.close();
     });
 
-    let parserStream = Parser.createStream(config.parserBufferSize);
+    let parserStream = createParserStream({
+      maxBufferSize: config.parserBufferSize,
+    });
     const pipelineManager = createPipelineManager(
       telnet,
       parserStream,
@@ -234,7 +238,7 @@ function createConnectionHandler(config: ServerConfig) {
               );
               telnet.write("Present\r\n");
               break;
-            case TELNET.GO_AHEAD:
+            case TELNET.GA:
               // GA marks end of prompt; nothing to do
               return;
             default:

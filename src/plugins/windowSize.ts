@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { PluginFactory } from "../index.js";
-import { TELNET } from "../parser.js";
+import { TELNET } from "../telnet/index.js";
 
 const ConfigSchema = z.discriminatedUnion("negotiate", [
   z.object({

@@ -1,5 +1,5 @@
 import { PluginFactory } from "../index.js";
-import { TELNET } from "../parser.js";
+import { TELNET } from "../telnet/index.js";
 
 const terminalSpeed: PluginFactory<{ negotiate: "reject" }> =
   ({ negotiate: _negotiate }) =>

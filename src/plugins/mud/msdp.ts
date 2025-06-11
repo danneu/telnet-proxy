@@ -1,5 +1,5 @@
 import { PluginFactory } from "../../index.js";
-import { TELNET } from "../../parser.js";
+import { TELNET } from "../../telnet/index.js";
 
 // FIXME: Untested, unused
 

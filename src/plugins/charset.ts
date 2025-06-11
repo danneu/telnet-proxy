@@ -1,5 +1,5 @@
 import { PluginFactory } from "../index.js";
-import { TELNET } from "../parser.js";
+import { TELNET } from "../telnet/index.js";
 
 // TODO: Handle CHARSET negotiation
 // Example server message if we DO:

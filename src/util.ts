@@ -1,4 +1,4 @@
-import { TELNET } from "./parser.js";
+import { TELNET } from "./telnet/index.js";
 
 export function autonegotiate(
   incoming: TELNET["DO"] | TELNET["DONT"] | TELNET["WILL"] | TELNET["WONT"],
