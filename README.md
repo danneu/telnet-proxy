@@ -2,23 +2,17 @@
 
 A Telnet to WebSocket proxy server.
 
-## Installation
-
-### Global Installation (Recommended)
+## Install
 
 ```sh
 npm install -g telnet-proxy
-telnet-proxy
 ```
 
-### Local Development
+## Run
 
 ```sh
-git clone https://github.com/danneu/telnet-proxy.git
-cd telnet-proxy
-pnpm install
-pnpm run dev # dev
-pnpm run start # prod
+PORT=8888 telnet-proxy
+# Listening on port 8888
 ```
 
 ## Connect
@@ -84,33 +78,66 @@ interface Plugin {
 }
 ```
 
+### Negotiation
+
+The server will send us negotiation messages and we should respond.
+
+| Sender | Receiver | Sender means                          | Receiver means     | Option now in effect |
+| ------ | -------- | ------------------------------------- | ------------------ | -------------------- |
+| WILL   | DO       | I want to X if you can handle it      | I can handle it    | ✅ Yes               |
+| WILL   | DONT     | I want to X if you can handle it      | I cannot handle it | ❌ No                |
+| DO     | WILL     | I can handle X if you wish to send it | I will send X      | ❎ Yes               |
+| DO     | WONT     | I can handle X if you wish to send it | I can't send X     | ❌ No                |
+| WONT   | DONT     | I don't want to X                     | I won't expect X   | ❌ No                |
+| DONT   | WONT     | I don't want you to X                 | I won't send X     | ❌ No                |
+
 ### Simple Plugin Example
+
+A real plugin would want to handle all negotiation verbs: `DO`, `DONT`, `WILL`, `WONT`.
+
+By default, if no plugins handle a negotiation `<verb> <option>` pair, the proxy auto-responds with `DONT` and `WONT`.
 
 ```typescript
 import { PluginFactory } from "../index.js";
 import { Cmd } from "../parser.js";
 
-const echo: PluginFactory<{ enabled: boolean }> = (config) => (ctx) => {
-  return {
-    name: "echo",
-    onServerChunk: (chunk) => {
-      // Handle server echo negotiation
-      if (
-        chunk.type === "NEGOTIATION" &&
-        chunk.name === "WILL" &&
-        chunk.target === Cmd.ECHO
-      ) {
-        const response = config.enabled ? Cmd.DO : Cmd.DONT;
-        console.log(
-          `[echo]: ${config.enabled ? "Accepting" : "Rejecting"} server echo`,
-        );
-        ctx.sendToServer(Uint8Array.from([Cmd.IAC, response, Cmd.ECHO]));
-        return { type: "handled" };
-      }
-      return { type: "continue" };
-    },
+const echo: PluginFactory<{ negotiate: "accept" | "reject" }> =
+  ({ negotiate }) =>
+  (ctx) => {
+    return {
+      name: "echo",
+      onServerChunk: (chunk) => {
+        // Handle server echo negotiation
+        if (
+          chunk.type === "negotiation" &&
+          chunk.verb === TELNET.WILL &&
+          chunk.option === TELNET.ECHO
+        ) {
+          const response = negotiate === "accept" ? TELNET.DO : TELNET.DONT;
+          console.log(
+            `[echo]: ${negotiate === "accept" ? "Accepting" : "Rejecting"} server echo`,
+          );
+          ctx.sendToServer(
+            Uint8Array.from([TELNET.IAC, response, TELNET.ECHO]),
+          );
+
+          // Important: no other plugins should handle this chunk
+          return { type: "handled" };
+        }
+
+        // Let other plugins handle the chunk
+        return { type: "continue" };
+      },
+    };
   };
-};
 ```
 
-Built-in plugins handle common telnet options like window size, compression (MCCP2), and MUD protocols (GMCP, MSSP).
+## Development
+
+```sh
+git clone https://github.com/danneu/telnet-proxy.git
+cd telnet-proxy
+pnpm install
+pnpm run dev # dev
+pnpm run start # prod
+```

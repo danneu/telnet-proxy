@@ -16,7 +16,7 @@ const msp: PluginFactory<{ negotiate: "accept" | "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.WILL &&
-          chunk.target === TELNET.MSP
+          chunk.option === TELNET.MSP
         ) {
           if (negotiate === "accept") {
             console.log("[msp]: Client->Server IAC DO MSP");

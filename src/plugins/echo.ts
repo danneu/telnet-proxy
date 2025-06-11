@@ -8,7 +8,7 @@ const echo: PluginFactory<{ negotiate: "accept" | "reject" }> =
     return {
       name: "echo",
       onServerChunk: (chunk) => {
-        if (chunk.type === "negotiation" && chunk.target === TELNET.ECHO) {
+        if (chunk.type === "negotiation" && chunk.option === TELNET.ECHO) {
           // Trying out simpler way to automatically negotiate
           const reply = autonegotiate(chunk.verb, negotiate);
           console.log(

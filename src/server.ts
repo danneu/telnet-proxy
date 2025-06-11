@@ -249,9 +249,9 @@ function createConnectionHandler(config: ServerConfig) {
           // Auto-reject any unhandled negotiations
           const reply = autonegotiate(chunk.verb, "reject");
           console.log(
-            `⚠️ [Auto-reject] Client->Server IAC ${getTelnetCodeName(reply)} ${chunk.target}`,
+            `⚠️ [Auto-reject] Client->Server IAC ${getTelnetCodeName(reply)} ${chunk.option}`,
           );
-          telnet.write(Uint8Array.from([TELNET.IAC, reply, chunk.target]));
+          telnet.write(Uint8Array.from([TELNET.IAC, reply, chunk.option]));
           return;
         }
         case "subnegotiation": {
@@ -419,10 +419,10 @@ function prettyChunk(chunk: Chunk): Chunk & {
   };
 
   // Add friendly names
-  if ("target" in chunk) {
-    pretty.targetName = isTelnetCode(chunk.target)
-      ? getTelnetCodeName(chunk.target)
-      : `unknown(${chunk.target})`;
+  if ("option" in chunk) {
+    pretty.targetName = isTelnetCode(chunk.option)
+      ? getTelnetCodeName(chunk.option)
+      : `unknown(${chunk.option})`;
   }
   if ("code" in chunk) {
     pretty.codeName = isTelnetCode(chunk.code)

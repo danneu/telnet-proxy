@@ -29,7 +29,7 @@ describe("Parser subnegotiation handling", () => {
 
     const chunk = parser.next();
     assert(isSBChunk(chunk), "Expected SB chunk");
-    assert.equal(chunk.target, TELNET.MCCP2);
+    assert.equal(chunk.option, TELNET.MCCP2);
     assert.deepEqual(chunk.data, new Uint8Array([1, 2, 3]));
   });
 
@@ -56,7 +56,7 @@ describe("Parser subnegotiation handling", () => {
 
     const chunk = parser.next();
     assert(isSBChunk(chunk), "Expected SB chunk");
-    assert.equal(chunk.target, 86);
+    assert.equal(chunk.option, 86);
     assert.deepEqual(chunk.data, new Uint8Array([1, 2, 255, 3, 4]));
   });
 
@@ -136,7 +136,7 @@ describe("Parser subnegotiation handling", () => {
 
     const chunk = parser.next();
     assert(isSBChunk(chunk), "Expected SB chunk");
-    assert.equal(chunk.target, TELNET.ECHO);
+    assert.equal(chunk.option, TELNET.ECHO);
     assert.deepEqual(chunk.data, new Uint8Array([]));
   });
 });

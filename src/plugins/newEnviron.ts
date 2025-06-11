@@ -10,7 +10,7 @@ const newEnviron: PluginFactory<{ negotiate: "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.DO &&
-          chunk.target === TELNET.NEW_ENVIRON
+          chunk.option === TELNET.NEW_ENVIRON
         ) {
           console.log("[newEnviron]: Client->Server IAC WONT NEW_ENVIRON");
           ctx.sendToServer(

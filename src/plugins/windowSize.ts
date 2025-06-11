@@ -24,7 +24,7 @@ const windowSize: PluginFactory<Config> = (_config) => (ctx) => {
       if (
         chunk.type === "negotiation" &&
         chunk.verb === TELNET.DO &&
-        chunk.target === TELNET.WINDOW_SIZE
+        chunk.option === TELNET.WINDOW_SIZE
       ) {
         if (config.negotiate === "accept") {
           const { width, height } = config;

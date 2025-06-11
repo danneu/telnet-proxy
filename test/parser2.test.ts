@@ -2,32 +2,8 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { TELNET, type Chunk } from "../src/telnet/index.js";
 import { Readable, PassThrough } from "stream";
-import { createParser, createParserStream } from "../src/telnet/index.js";
+import { createParser, createParserStream, createChunk } from "../src/telnet/index.js";
 
-// Type predicates for chunk types
-function isTextChunk(
-  chunk: Chunk | null,
-): chunk is Extract<Chunk, { type: "text" }> {
-  return chunk?.type === "text";
-}
-
-function isNegotiationChunk(
-  chunk: Chunk | null,
-): chunk is Extract<Chunk, { type: "negotiation" }> {
-  return chunk?.type === "negotiation";
-}
-
-function isSubnegotiationChunk(
-  chunk: Chunk | null,
-): chunk is Extract<Chunk, { type: "subnegotiation" }> {
-  return chunk?.type === "subnegotiation";
-}
-
-function isCommandChunk(
-  chunk: Chunk | null,
-): chunk is Extract<Chunk, { type: "command" }> {
-  return chunk?.type === "command";
-}
 
 describe("Parser - Text Chunks", () => {
   test("parses simple text data", () => {
@@ -37,10 +13,7 @@ describe("Parser - Text Chunks", () => {
     parser.push(testData);
     const chunk = parser.next();
 
-    assert.deepEqual(chunk, {
-      type: "text",
-      data: testData,
-    });
+    assert.deepEqual(chunk, createChunk.text(testData));
   });
 
   test("handles empty text data", () => {
@@ -67,16 +40,11 @@ describe("Parser - Text Chunks", () => {
     parser.push(data);
     const textChunk = parser.next();
 
-    assert(isTextChunk(textChunk));
-    assert.deepEqual(textChunk.data, new Uint8Array([72, 101, 108, 108, 111]));
+    assert.deepEqual(textChunk, createChunk.text(new Uint8Array([72, 101, 108, 108, 111])));
 
     // Should have negotiation chunk next
     const negChunk = parser.next();
-    assert.deepEqual(negChunk, {
-      type: "negotiation",
-      verb: TELNET.DO,
-      target: TELNET.ECHO,
-    });
+    assert.deepEqual(negChunk, createChunk.negotiation(TELNET.DO, TELNET.ECHO));
   });
 
   test("handles partial text data across multiple pushes", () => {
@@ -86,8 +54,7 @@ describe("Parser - Text Chunks", () => {
     parser.push(new Uint8Array([108, 108, 111])); // "llo"
 
     const chunk = parser.next();
-    assert(isTextChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([72, 101, 108, 108, 111])); // "Hello"
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([72, 101, 108, 108, 111]))); // "Hello"
   });
 
   test("handles binary data in text chunks", () => {
@@ -97,11 +64,7 @@ describe("Parser - Text Chunks", () => {
     parser.push(binaryData);
     const chunk = parser.next();
 
-    assert(isTextChunk(chunk));
-    assert.deepEqual(chunk, {
-      type: "text",
-      data: binaryData,
-    });
+    assert.deepEqual(chunk, createChunk.text(binaryData));
   });
 });
 
@@ -111,11 +74,7 @@ describe("Parser - Negotiation Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.DO, TELNET.ECHO]));
 
     const chunk = parser.next();
-    assert.deepEqual(chunk, {
-      type: "negotiation",
-      verb: TELNET.DO,
-      target: TELNET.ECHO,
-    });
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DO, TELNET.ECHO));
   });
 
   test("parses IAC DONT command", () => {
@@ -123,12 +82,7 @@ describe("Parser - Negotiation Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.DONT, TELNET.WINDOW_SIZE]));
 
     const chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.deepEqual(chunk, {
-      type: "negotiation",
-      verb: TELNET.DONT,
-      target: TELNET.WINDOW_SIZE,
-    });
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DONT, TELNET.WINDOW_SIZE));
   });
 
   test("parses IAC WILL command", () => {
@@ -136,12 +90,7 @@ describe("Parser - Negotiation Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.WILL, TELNET.MCCP2]));
 
     const chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.deepEqual(chunk, {
-      type: "negotiation",
-      verb: TELNET.WILL,
-      target: TELNET.MCCP2,
-    });
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.WILL, TELNET.MCCP2));
   });
 
   test("parses IAC WONT command", () => {
@@ -149,12 +98,7 @@ describe("Parser - Negotiation Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.WONT, TELNET.GMCP]));
 
     const chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.deepEqual(chunk, {
-      type: "negotiation",
-      verb: TELNET.WONT,
-      target: TELNET.GMCP,
-    });
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.WONT, TELNET.GMCP));
   });
 
   test("handles partial negotation", () => {
@@ -172,12 +116,7 @@ describe("Parser - Negotiation Chunks", () => {
     // Complete the negotiation
     parser2.push(new Uint8Array([TELNET.DO, TELNET.ECHO]));
     const chunk = parser2.next();
-    assert(isNegotiationChunk(chunk));
-    assert.deepEqual(chunk, {
-      type: "negotiation",
-      verb: TELNET.DO,
-      target: TELNET.ECHO,
-    });
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DO, TELNET.ECHO));
   });
 
   test("handles negotiation with unknown option codes", () => {
@@ -186,9 +125,7 @@ describe("Parser - Negotiation Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.WILL, unknownOption]));
 
     const chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.equal(chunk.verb, TELNET.WILL);
-    assert.equal(chunk.target, unknownOption);
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.WILL, unknownOption));
   });
 });
 
@@ -198,8 +135,7 @@ describe("Parser - Command Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.NOP]));
 
     const chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.NOP);
+    assert.deepEqual(chunk, createChunk.command(TELNET.NOP));
   });
 
   test("parses IAC AYT command", () => {
@@ -207,8 +143,7 @@ describe("Parser - Command Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.ARE_YOU_THERE]));
 
     const chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.ARE_YOU_THERE);
+    assert.deepEqual(chunk, createChunk.command(TELNET.ARE_YOU_THERE));
   });
 
   test("parses IAC GA command", () => {
@@ -216,8 +151,7 @@ describe("Parser - Command Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.GA]));
 
     const chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.GA);
+    assert.deepEqual(chunk, createChunk.command(TELNET.GA));
   });
 
   test("handles partial command", () => {
@@ -229,8 +163,7 @@ describe("Parser - Command Chunks", () => {
     parser.push(new Uint8Array([TELNET.NOP]));
     const chunk = parser.next();
 
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.NOP);
+    assert.deepEqual(chunk, createChunk.command(TELNET.NOP));
   });
 
   test("handles unknown command codes", () => {
@@ -239,8 +172,7 @@ describe("Parser - Command Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, unknownCode]));
 
     const chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, unknownCode);
+    assert.deepEqual(chunk, createChunk.command(unknownCode));
   });
 });
 
@@ -260,9 +192,7 @@ describe("Parser - Subnegotiation Chunks", () => {
     );
 
     const chunk = parser.next();
-    assert(isSubnegotiationChunk(chunk));
-    assert.equal(chunk.target, TELNET.WINDOW_SIZE);
-    assert.deepEqual(chunk.data, new Uint8Array(testData));
+    assert.deepEqual(chunk, createChunk.subnegotiation(TELNET.WINDOW_SIZE, new Uint8Array(testData)));
   });
 
   test("handles IAC escaping in subnegotiation data", () => {
@@ -283,8 +213,7 @@ describe("Parser - Subnegotiation Chunks", () => {
     );
 
     const chunk = parser.next();
-    assert(isSubnegotiationChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([1, 255, 2]));
+    assert.deepEqual(chunk, createChunk.subnegotiation(TELNET.MCCP2, new Uint8Array([1, 255, 2])));
   });
 
   test("handles multiple consecutive escaped IACs", () => {
@@ -307,8 +236,7 @@ describe("Parser - Subnegotiation Chunks", () => {
     );
 
     const chunk = parser.next();
-    assert(isSubnegotiationChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([255, 255, 255]));
+    assert.deepEqual(chunk, createChunk.subnegotiation(50, new Uint8Array([255, 255, 255])));
   });
 
   test("handles empty subnegotiation", () => {
@@ -324,9 +252,7 @@ describe("Parser - Subnegotiation Chunks", () => {
     );
 
     const chunk = parser.next();
-    assert(isSubnegotiationChunk(chunk));
-    assert.equal(chunk.target, TELNET.ECHO);
-    assert.deepEqual(chunk.data, new Uint8Array([]));
+    assert.deepEqual(chunk, createChunk.subnegotiation(TELNET.ECHO, new Uint8Array([])));
   });
 
   test("waits for complete subnegotiation", () => {
@@ -340,8 +266,7 @@ describe("Parser - Subnegotiation Chunks", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.SE]));
     const chunk = parser.next();
 
-    assert(isSubnegotiationChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([1, 2, 3]));
+    assert.deepEqual(chunk, createChunk.subnegotiation(TELNET.GMCP, new Uint8Array([1, 2, 3])));
   });
 
   test("handles partial IAC at end of buffer", () => {
@@ -355,8 +280,7 @@ describe("Parser - Subnegotiation Chunks", () => {
     parser.push(new Uint8Array([TELNET.SE]));
     const chunk = parser.next();
 
-    assert(isSubnegotiationChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([1, 2]));
+    assert.deepEqual(chunk, createChunk.subnegotiation(100, new Uint8Array([1, 2])));
   });
 
   test("handles IAC followed by non-IAC/SE in data", () => {
@@ -378,8 +302,7 @@ describe("Parser - Subnegotiation Chunks", () => {
     );
 
     const chunk = parser.next();
-    assert(isSubnegotiationChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([1, TELNET.IAC, 50, 2]));
+    assert.deepEqual(chunk, createChunk.subnegotiation(100, new Uint8Array([1, TELNET.IAC, 50, 2])));
   });
 });
 
@@ -422,30 +345,23 @@ describe("Parser - Mixed Content Streaming", () => {
 
     // Parse text chunk
     let chunk = parser.next();
-    assert(isTextChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([72, 101, 108, 108, 111, 32]));
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([72, 101, 108, 108, 111, 32])));
 
     // Parse negotiation
     chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.equal(chunk.verb, TELNET.DO);
-    assert.equal(chunk.target, TELNET.ECHO);
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DO, TELNET.ECHO));
 
     // Parse more text
     chunk = parser.next();
-    assert(isTextChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([87, 111, 114, 108, 100]));
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([87, 111, 114, 108, 100])));
 
     // Parse command
     chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.NOP);
+    assert.deepEqual(chunk, createChunk.command(TELNET.NOP));
 
     // Parse subnegotiation
     chunk = parser.next();
-    assert(isSubnegotiationChunk(chunk));
-    assert.equal(chunk.target, TELNET.WINDOW_SIZE);
-    assert.deepEqual(chunk.data, new Uint8Array([1, 2]));
+    assert.deepEqual(chunk, createChunk.subnegotiation(TELNET.WINDOW_SIZE, new Uint8Array([1, 2])));
 
     // No more chunks
     assert.equal(parser.next(), null);
@@ -463,14 +379,11 @@ describe("Parser - Mixed Content Streaming", () => {
 
     // Should get text chunk first
     let chunk = parser.next();
-    assert(isTextChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([72, 101, 108, 108, 111]));
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([72, 101, 108, 108, 111])));
 
     // Should get negotiation chunk
     chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.equal(chunk.verb, TELNET.DO);
-    assert.equal(chunk.target, TELNET.ECHO);
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DO, TELNET.ECHO));
   });
 
   test("handles interleaved complete and incomplete chunks", () => {
@@ -481,7 +394,7 @@ describe("Parser - Mixed Content Streaming", () => {
 
     // Should get text chunk
     let chunk = parser.next();
-    assert(isTextChunk(chunk));
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([72, 101, 108, 108, 111])));
 
     // Should not get command yet (incomplete IAC)
     chunk = parser.next();
@@ -492,13 +405,11 @@ describe("Parser - Mixed Content Streaming", () => {
 
     // Should get command
     chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.NOP);
+    assert.deepEqual(chunk, createChunk.command(TELNET.NOP));
 
     // Should get more text
     chunk = parser.next();
-    assert(isTextChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([87, 111, 114, 108, 100]));
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([87, 111, 114, 108, 100])));
   });
 });
 
@@ -587,8 +498,8 @@ describe("Parser - Stream Interface", () => {
     await promise;
 
     assert.equal(chunks.length, 2);
-    assert(isTextChunk(chunks[0]));
-    assert(isNegotiationChunk(chunks[1]));
+    assert.deepEqual(chunks[0], createChunk.text(new Uint8Array([72, 101, 108, 108, 111])));
+    assert.deepEqual(chunks[1], createChunk.negotiation(TELNET.DO, TELNET.ECHO));
   });
 
   test("stream drain() works correctly", () => {
@@ -628,8 +539,8 @@ describe("Parser - Stream Interface", () => {
     await promise;
 
     assert.equal(chunks.length, 2);
-    assert(isTextChunk(chunks[0]));
-    assert(isCommandChunk(chunks[1]));
+    assert.deepEqual(chunks[0], createChunk.text(new Uint8Array([72, 101, 108, 108, 111])));
+    assert.deepEqual(chunks[1], createChunk.command(TELNET.NOP));
   });
 
   test("stream with custom buffer size", () => {
@@ -665,17 +576,13 @@ describe("Parser - Edge Cases and Error Conditions", () => {
     );
 
     let chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.NOP);
+    assert.deepEqual(chunk, createChunk.command(TELNET.NOP));
 
     chunk = parser.next();
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.NOP);
+    assert.deepEqual(chunk, createChunk.command(TELNET.NOP));
 
     chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.equal(chunk.verb, TELNET.DO);
-    assert.equal(chunk.target, TELNET.ECHO);
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DO, TELNET.ECHO));
   });
 
   test("handles zero-length pushes", () => {
@@ -686,7 +593,7 @@ describe("Parser - Edge Cases and Error Conditions", () => {
 
     parser.push(new Uint8Array([72, 101, 108, 108, 111]));
     const chunk = parser.next();
-    assert(isTextChunk(chunk));
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([72, 101, 108, 108, 111])));
   });
 
   test("handles single byte at a time", () => {
@@ -698,9 +605,7 @@ describe("Parser - Edge Cases and Error Conditions", () => {
     });
 
     const chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.equal(chunk.verb, TELNET.DO);
-    assert.equal(chunk.target, TELNET.ECHO);
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DO, TELNET.ECHO));
   });
 
   test("handles Buffer input", () => {
@@ -710,8 +615,7 @@ describe("Parser - Edge Cases and Error Conditions", () => {
     parser.push(Buffer.from([72, 101, 108, 108, 111]));
 
     const chunk = parser.next();
-    assert(isTextChunk(chunk));
-    assert.deepEqual(chunk.data, new Uint8Array([72, 101, 108, 108, 111]));
+    assert.deepEqual(chunk, createChunk.text(new Uint8Array([72, 101, 108, 108, 111])));
   });
 
   test("preserves state across multiple next() calls with no data", () => {
@@ -728,8 +632,7 @@ describe("Parser - Edge Cases and Error Conditions", () => {
     parser.push(new Uint8Array([TELNET.NOP]));
     const chunk = parser.next();
 
-    assert(isCommandChunk(chunk));
-    assert.equal(chunk.code, TELNET.NOP);
+    assert.deepEqual(chunk, createChunk.command(TELNET.NOP));
   });
 
   test("handles large text chunks", () => {
@@ -742,10 +645,7 @@ describe("Parser - Edge Cases and Error Conditions", () => {
     parser.push(largeText);
     const chunk = parser.next();
 
-    assert(isTextChunk(chunk));
-    assert.equal(chunk.data.length, 1024);
-    assert.equal(chunk.data[0], 65);
-    assert.equal(chunk.data[1023], 65);
+    assert.deepEqual(chunk, createChunk.text(largeText));
   });
 
   test("handles maximum option code values", () => {
@@ -755,7 +655,6 @@ describe("Parser - Edge Cases and Error Conditions", () => {
     parser.push(new Uint8Array([TELNET.IAC, TELNET.DO, 254])); // 254 is max valid option
 
     const chunk = parser.next();
-    assert(isNegotiationChunk(chunk));
-    assert.equal(chunk.target, 254);
+    assert.deepEqual(chunk, createChunk.negotiation(TELNET.DO, 254));
   });
 });

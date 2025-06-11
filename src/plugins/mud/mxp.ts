@@ -11,7 +11,7 @@ const mxp: PluginFactory<{ negotiate: "accept" | "reject" }> =
           // aarchonmud.com:7000 sends WILL MXP
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.WILL &&
-          chunk.target === TELNET.MXP
+          chunk.option === TELNET.MXP
         ) {
           if (negotiate === "accept") {
             console.log("[mxp]: Client->Server IAC DO MXP");
@@ -28,7 +28,7 @@ const mxp: PluginFactory<{ negotiate: "accept" | "reject" }> =
         } else if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.DO &&
-          chunk.target === TELNET.MXP
+          chunk.option === TELNET.MXP
         ) {
           if (negotiate === "accept") {
             console.log("[mxp]: Client->Server IAC WILL MXP");

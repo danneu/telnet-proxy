@@ -12,7 +12,7 @@ const gmcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.WILL &&
-          chunk.target === TELNET.GMCP
+          chunk.option === TELNET.GMCP
         ) {
           if (negotiate === "accept") {
             console.log("[gmcp]: Client->Server IAC DO GMCP");

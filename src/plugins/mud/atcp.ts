@@ -12,7 +12,7 @@ const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.WILL &&
-          chunk.target === TELNET.ATCP
+          chunk.option === TELNET.ATCP
         ) {
           if (negotiate === "accept") {
             console.log("[atcp]: Client->Server IAC DO ATCP");
@@ -29,7 +29,7 @@ const atcp: PluginFactory<{ negotiate: "accept" | "reject" }> =
         } else if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.DO &&
-          chunk.target === TELNET.ATCP
+          chunk.option === TELNET.ATCP
         ) {
           // aarchonmud.com:7000 sends DO ATCP
           if (negotiate === "accept") {

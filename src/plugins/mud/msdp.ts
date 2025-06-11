@@ -129,7 +129,7 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
       if (
         chunk.type === "negotiation" &&
         chunk.verb === TELNET.WILL &&
-        chunk.target === TELNET.MSDP
+        chunk.option === TELNET.MSDP
       ) {
         if (negotiate === "accept") {
           console.log("[MSDP] Server offers MSDP, accepting");
@@ -147,7 +147,7 @@ const msdp: PluginFactory<MSDPConfig> = (config) => (ctx) => {
       }
 
       // Handle MSDP subnegotiation
-      if (chunk.type === "subnegotiation" && chunk.target === TELNET.MSDP) {
+      if (chunk.type === "subnegotiation" && chunk.option === TELNET.MSDP) {
         // Parse MSDP data from the subnegotiation
         const parsed = parseMSDPData(chunk.data);
         if (parsed) {

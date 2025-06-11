@@ -14,7 +14,7 @@ const mccp2: PluginFactory<{ negotiate: "accept" | "reject" }> =
       if (
         chunk.type === "negotiation" &&
         chunk.verb === TELNET.WILL &&
-        chunk.target === TELNET.MCCP2
+        chunk.option === TELNET.MCCP2
       ) {
         if (negotiate === "accept") {
           console.log(`[${PLUGIN_NAME}]: Accepting compression`);
@@ -31,7 +31,7 @@ const mccp2: PluginFactory<{ negotiate: "accept" | "reject" }> =
       } else if (
         // Handle compression start
         chunk.type === "subnegotiation" &&
-        chunk.target === TELNET.MCCP2
+        chunk.option === TELNET.MCCP2
       ) {
         console.log(`[${PLUGIN_NAME}]: Compression starting`);
         const decompressor = zlib.createInflate({

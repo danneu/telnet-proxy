@@ -10,7 +10,7 @@ const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.WILL &&
-          chunk.target === TELNET.MSSP
+          chunk.option === TELNET.MSSP
         ) {
           if (negotiate === "accept") {
             console.log("[mssp]: Client->Server IAC DO MSSP");
@@ -26,7 +26,7 @@ const mssp: PluginFactory<{ negotiate: "accept" | "reject" }> =
           return { type: "handled" };
         } else if (
           chunk.type === "subnegotiation" &&
-          chunk.target === TELNET.MSSP
+          chunk.option === TELNET.MSSP
         ) {
           const data = decode(chunk.data);
           console.log("[mssp] MSSP data:", data);

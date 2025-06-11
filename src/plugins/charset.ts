@@ -16,7 +16,7 @@ const charset: PluginFactory<{ negotiate: "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.WILL &&
-          chunk.target === TELNET.CHARSET
+          chunk.option === TELNET.CHARSET
         ) {
           console.log("[charset]: Client->Server IAC DONT CHARSET");
           ctx.sendToServer(
@@ -28,7 +28,7 @@ const charset: PluginFactory<{ negotiate: "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.DO &&
-          chunk.target === TELNET.CHARSET
+          chunk.option === TELNET.CHARSET
         ) {
           console.log("[charset]: Client->Server IAC WONT CHARSET");
           ctx.sendToServer(

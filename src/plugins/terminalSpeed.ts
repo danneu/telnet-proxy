@@ -10,7 +10,7 @@ const terminalSpeed: PluginFactory<{ negotiate: "reject" }> =
         if (
           chunk.type === "negotiation" &&
           chunk.verb === TELNET.DO &&
-          chunk.target === TELNET.TERMINAL_SPEED
+          chunk.option === TELNET.TERMINAL_SPEED
         ) {
           console.log(
             "[terminalSpeed]: Client->Server IAC WONT TERMINAL_SPEED",

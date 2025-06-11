@@ -60,7 +60,7 @@ describe("Parser - Buffer Edge Cases", () => {
     assert.deepEqual(chunk, {
       type: "negotiation",
       verb: TELNET.DO,
-      target: TELNET.ECHO,
+      option: TELNET.ECHO,
     });
   });
 
