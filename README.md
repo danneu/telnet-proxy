@@ -51,22 +51,22 @@ const config: ServerConfig = {
   logIncomingData: "none", // no logging
   plugins: [
     // Basic telnet options
-    plugin.windowSize({ width: 100, height: 24 }),
-    plugin.echo({ reply: "reject" }), // server shouldn't echo back our messages
+    plugin.windowSize({ negotiate: "accept", width: 100, height: 24 }),
+    plugin.echo({ negotiate: "reject" }), // always reject echo attempts
 
     // Periodically send empty data to keep connection alive
     plugin.heartbeat(),
 
     // MUD protocols
-    plugin.mud.mccp2({ reply: "accept" }),
-    plugin.mud.gmcp({ reply: "reject" }),
-    plugin.mud.mssp({ reply: "accept" }),
+    plugin.mud.mccp2({ negotiate: "accept" }), // allow client<-server zlib compression
+    plugin.mud.mssp({ negotiate: "accept" }), // send mud:mssp json events to client (when format=json)
   ],
 };
 
 const server = createServer(config);
-await server.listen();
-console.log(`Listening on port ${config.port}...`);
+server.listen().then(() => {
+  console.log(`Listening on port ${config.port}...`);
+});
 ```
 
 ## Plugin System
