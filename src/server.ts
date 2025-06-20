@@ -16,6 +16,7 @@ import { createHttpServer } from "./http-server.js";
 import { createPipelineManager } from "./pipeline-manager.js";
 import { Transform } from "stream";
 import { autonegotiate } from "./util.js";
+import { allEncodings } from "./encoding.js";
 
 // Server sends DO → You respond WILL or WONT
 // Server sends WILL → You respond DO or DONT
@@ -38,7 +39,7 @@ const ConnectionOptionsSchema = z.object({
   port: z.coerce.number().optional().default(23),
   format: z.enum(["raw", "json"]).optional().default("raw"),
   encoding: z
-    .enum(["auto", "latin1", "utf8", "gbk", "big5"])
+    .enum(["auto", ...allEncodings] as const)
     .optional()
     .default("auto"),
 });
@@ -58,10 +59,8 @@ function createConnectionHandler(config: ServerConfig) {
         ".",
       )}: ${result.error.issues[0].message}`;
 
-      sendToClient({
-        type: "error",
-        message,
-      });
+      // Send error directly to websocket before options is available
+      websocket.send(`Error: ${message}`);
       websocket.close();
       return;
     }

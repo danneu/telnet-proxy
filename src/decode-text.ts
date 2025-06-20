@@ -1,24 +1,27 @@
 import iconv from "iconv-lite";
+import { Encoding } from "./encoding.js";
 
 // Mud servers generally send latin1 or utf-8.
 // We'll try to decode it as utf-8 and fallback to latin1 if it fails.
 export function decodeText(
   data: Uint8Array,
-  knownCharset?: "auto" | "latin1" | "utf8" | "gbk" | "big5",
+  knownCharset?: "auto" | Encoding,
 ): {
   text: string;
-  charset: "latin1" | "utf8" | "gbk" | "big5";
+  charset: Encoding;
 } {
   // Callsite knows charset, so use it
   if (knownCharset && knownCharset !== "auto") {
-    if (knownCharset === "gbk" || knownCharset === "big5") {
+    // TextDecoder can handle utf8 (and latin1, a subset of utf8)
+    if (knownCharset === "utf8" || knownCharset === "latin1") {
       return {
-        text: iconv.decode(Buffer.from(data), knownCharset),
+        text: new TextDecoder(knownCharset).decode(data),
         charset: knownCharset,
       };
     }
+    // Otherwise, use iconv-lite
     return {
-      text: new TextDecoder(knownCharset).decode(data),
+      text: iconv.decode(Buffer.from(data), knownCharset),
       charset: knownCharset,
     };
   }
