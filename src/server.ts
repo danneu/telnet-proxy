@@ -114,7 +114,16 @@ function createConnectionHandler(config: ServerConfig) {
     });
 
     telnet.on("error", (error) => {
-      console.log("telnet connection error:", error);
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        (error.code === "EPIPE" || error.code === "ECONNRESET")
+      ) {
+        // Not an error
+        console.log(`telnet connection closed unexpectedly: ${error.code}`);
+      } else {
+        console.error("telnet connection error:", error);
+      }
       sendToClient({
         type: "error",
         message: `Connection failed: ${error.message}`,
@@ -287,7 +296,7 @@ function createConnectionHandler(config: ServerConfig) {
       // Convert message to bytes
       let bytes = encodeWsRawData(_message, isBinary, options.encoding);
 
-      console.log("websocket on message", _message.toString());
+      // console.log("websocket on message", _message.toString());
 
       for (const plugin of plugins) {
         const result = plugin.onClientMessage?.(bytes);
@@ -307,11 +316,24 @@ function createConnectionHandler(config: ServerConfig) {
         }
       }
 
-      telnet.write(
-        // Escape IAC bytes in user data for telnet transmission
-        // Plugins get pre-escaped bytes
-        escapeIAC(bytes),
-      );
+      // Only write if telnet connection is still open
+      if (!telnet.destroyed && telnet.writable) {
+        // console.log("writing to telnet", bytes.length);
+        try {
+          telnet.write(
+            // Escape IAC bytes in user data for telnet transmission
+            // Plugins get pre-escaped bytes
+            escapeIAC(bytes),
+          );
+        } catch (error) {
+          console.log(
+            "Failed to write to telnet (connection likely closed):",
+            error instanceof Error && "code" in error ? error.code : error,
+          );
+          // Close the WebSocket since telnet connection is broken
+          websocket.close();
+        }
+      }
     });
 
     websocket.on("error", (error) => {
