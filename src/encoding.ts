@@ -14,7 +14,11 @@ export function encodeWsRawData(
   encoding: string,
 ): Uint8Array {
   if (!isBinary) {
-    return encodeMessage(data.toString(), encoding);
+    // If encoding is still auto at this point, use latin1
+    return encodeMessage(
+      data.toString(),
+      encoding === "auto" ? "latin1" : encoding,
+    );
   }
 
   if (data instanceof ArrayBuffer) {

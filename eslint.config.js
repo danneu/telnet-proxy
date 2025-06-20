@@ -4,10 +4,6 @@ import tsparser from "@typescript-eslint/parser";
 import globals from "globals";
 
 export default [
-  js.configs.recommended,
-  {
-    ignores: ["dist/**/*"],
-  },
   {
     files: ["src/**/*.ts", "test/**/*.ts", "bin/**/*.ts"],
     languageOptions: {
@@ -25,6 +21,7 @@ export default [
       "@typescript-eslint": tseslint,
     },
     rules: {
+      ...js.configs.recommended.rules,
       ...tseslint.configs.recommended.rules,
       "@typescript-eslint/no-unused-vars": [
         "error",
