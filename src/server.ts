@@ -66,7 +66,11 @@ function createConnectionHandler(config: ServerConfig) {
       )}: ${result.error.issues[0].message}`;
 
       // Send error directly to websocket before options is available
-      websocket.send(`Error: ${message}`);
+      sendToClient(
+        { type: "error", message },
+        // Try to use the format they requested
+        url.searchParams.get("format") === "json" ? "json" : "raw",
+      );
       websocket.close();
       return;
     }
@@ -74,8 +78,11 @@ function createConnectionHandler(config: ServerConfig) {
     const options = result.data;
 
     // Always use this instead of websocket.send() directly.
-    function sendToClient(message: MessageToClient) {
-      switch (options.format) {
+    function sendToClient(
+      message: MessageToClient,
+      format: "raw" | "json" = options.format,
+    ) {
+      switch (format) {
         case "raw":
           switch (message.type) {
             case "data":
@@ -99,7 +106,7 @@ function createConnectionHandler(config: ServerConfig) {
           websocket.send(JSON.stringify(message));
           break;
         default: {
-          const exhaustive: never = options.format;
+          const exhaustive: never = format;
           throw new Error(`Invalid format: ${exhaustive}`);
         }
       }
