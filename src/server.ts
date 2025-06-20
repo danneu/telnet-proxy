@@ -9,14 +9,16 @@ import {
   createParserStream,
 } from "./telnet/index.js";
 import { IncomingMessage } from "http";
-import { decodeText } from "./decode-text.js";
 import { z } from "zod";
-import iconv from "iconv-lite";
 import { createHttpServer } from "./http-server.js";
 import { createPipelineManager } from "./pipeline-manager.js";
 import { Transform } from "stream";
 import { autonegotiate } from "./util.js";
-import { allEncodings } from "./encoding.js";
+import {
+  decodeMessage,
+  encodeWsRawData,
+  isEncodingSupported,
+} from "./encoding.js";
 
 // Server sends DO → You respond WILL or WONT
 // Server sends WILL → You respond DO or DONT
@@ -39,9 +41,13 @@ const ConnectionOptionsSchema = z.object({
   port: z.coerce.number().optional().default(23),
   format: z.enum(["raw", "json"]).optional().default("raw"),
   encoding: z
-    .enum(["auto", ...allEncodings] as const)
+    .string()
     .optional()
-    .default("auto"),
+    .default("auto")
+    .transform((val) => val.toLowerCase())
+    .refine((val) => val === "auto" || isEncodingSupported(val), {
+      message: `Encoding must be "auto" or a string that iconv supports`,
+    }),
 });
 
 export type ConnectionOptions = z.infer<typeof ConnectionOptionsSchema>;
@@ -219,9 +225,10 @@ function createConnectionHandler(config: ServerConfig) {
 
       switch (chunk.type) {
         case "text": {
-          const { text, charset } = decodeText(chunk.data, options.encoding);
-          if (charset === "latin1") {
-            options.encoding = "latin1";
+          const { text, charset } = decodeMessage(chunk.data, options.encoding);
+          // turn auto into the actual encoding
+          if (options.encoding === "auto") {
+            options.encoding = charset;
           }
           sendToClient({
             type: "data",
@@ -278,15 +285,7 @@ function createConnectionHandler(config: ServerConfig) {
 
     websocket.on("message", (_message: ws.RawData, isBinary: boolean) => {
       // Convert message to bytes
-      let bytes = isBinary
-        ? (_message as Uint8Array)
-        : options.encoding === "utf8"
-          ? new TextEncoder().encode(_message.toString()) // utf8
-          : options.encoding === "gbk" || options.encoding === "big5"
-            ? Uint8Array.from(
-                iconv.encode(_message.toString(), options.encoding),
-              )
-            : Uint8Array.from(Buffer.from(_message.toString(), "latin1")); // latin1
+      let bytes = encodeWsRawData(_message, isBinary, options.encoding);
 
       console.log("websocket on message", _message.toString());
 

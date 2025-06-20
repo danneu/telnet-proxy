@@ -1,12 +1,12 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { decodeText } from "../src/decode-text.js";
+import { decodeMessage } from "../src/encoding.js";
 
-describe("decodeText", () => {
+describe("decodeMessage", () => {
   test("decodes valid UTF-8 text with auto charset", () => {
     const text = "Hello, World! 🌍";
     const data = new TextEncoder().encode(text);
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, text);
     assert.equal(result.charset, "utf8");
@@ -15,7 +15,7 @@ describe("decodeText", () => {
   test("decodes valid UTF-8 text with explicit utf-8 charset", () => {
     const text = "Hello, World! 🌍";
     const data = new TextEncoder().encode(text);
-    const result = decodeText(data, "utf8");
+    const result = decodeMessage(data, "utf8");
 
     assert.equal(result.text, text);
     assert.equal(result.charset, "utf8");
@@ -26,7 +26,7 @@ describe("decodeText", () => {
     const data = new Uint8Array([
       0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0xff, 0xfe,
     ]); // "Hello " + invalid UTF-8
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, "Hello ÿþ"); // Latin-1 interpretation
     assert.equal(result.charset, "latin1");
@@ -37,7 +37,7 @@ describe("decodeText", () => {
     const data = new Uint8Array([
       0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0xe9, 0xe8,
     ]); // "Hello éè" in Latin-1
-    const result = decodeText(data, "latin1");
+    const result = decodeMessage(data, "latin1");
 
     assert.equal(result.text, "Hello éè");
     assert.equal(result.charset, "latin1");
@@ -45,7 +45,7 @@ describe("decodeText", () => {
 
   test("handles empty data", () => {
     const data = new Uint8Array(0);
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, "");
     assert.equal(result.charset, "utf8");
@@ -54,7 +54,7 @@ describe("decodeText", () => {
   test("handles ASCII text (valid in both encodings)", () => {
     const text = "Hello World 123!@#";
     const data = new TextEncoder().encode(text);
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, text);
     assert.equal(result.charset, "utf8"); // UTF-8 is tried first
@@ -63,7 +63,7 @@ describe("decodeText", () => {
   test("handles multi-byte UTF-8 characters", () => {
     const text = "日本語 中文 한글"; // Japanese, Chinese, Korean
     const data = new TextEncoder().encode(text);
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, text);
     assert.equal(result.charset, "utf8");
@@ -74,7 +74,7 @@ describe("decodeText", () => {
     const data = new Uint8Array([
       0xef, 0xbb, 0xbf, 0x48, 0x65, 0x6c, 0x6c, 0x6f,
     ]);
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     // TextDecoder should handle BOM transparently
     assert.equal(result.text, "Hello");
@@ -84,7 +84,7 @@ describe("decodeText", () => {
   test("respects explicit charset even for valid UTF-8", () => {
     const text = "Hello"; // Valid in both encodings
     const data = new TextEncoder().encode(text);
-    const result = decodeText(data, "latin1");
+    const result = decodeMessage(data, "latin1");
 
     assert.equal(result.text, text);
     assert.equal(result.charset, "latin1");
@@ -104,7 +104,7 @@ describe("decodeText", () => {
       0xf6,
       0xfc, // àéñöü
     ]);
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, "ÀÉÑÖÜàéñöü");
     assert.equal(result.charset, "latin1");
@@ -114,7 +114,7 @@ describe("decodeText", () => {
     // Text with newlines and tabs
     const text = "Line 1\nLine 2\tTabbed";
     const data = new TextEncoder().encode(text);
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, text);
     assert.equal(result.charset, "utf8");
@@ -123,7 +123,7 @@ describe("decodeText", () => {
   test("handles null bytes", () => {
     // Text with null bytes
     const data = new Uint8Array([0x48, 0x69, 0x00, 0x21]); // "Hi\0!"
-    const result = decodeText(data);
+    const result = decodeMessage(data, "auto");
 
     assert.equal(result.text, "Hi\0!");
     assert.equal(result.charset, "utf8");
